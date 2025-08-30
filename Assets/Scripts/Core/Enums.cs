@@ -50,5 +50,29 @@
             Props,
             Reflection
         }
+
+        public enum Notification
+        {
+            None = 0,
+
+            // --- Loader / Addressables: Errors ---
+            InvalidCatalogUrl,
+            CatalogInitFailed,
+            CatalogDownloadFailed,
+            CatalogSwitchFailed,
+            NoInternet,
+            LabelNotFound,
+            DownloadSizeQueryFailed,
+            DependenciesDownloadFailed,
+            SceneLoadFailed,
+            SceneUnloadFailed,
+            NotEnoughSpace,
+            CacheClearFailed,
+
+            // --- Success / Info ---
+            CatalogSwitchSuccess,
+            ModuleLoaded,
+            ModuleUnloaded
+        }
     }
 }

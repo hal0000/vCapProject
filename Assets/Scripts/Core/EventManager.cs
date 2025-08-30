@@ -3,10 +3,16 @@ using System;
 namespace Core
 {
     /// <summary>
-    ///     Minimal event hub for the loader flow.
+    ///     Minimal event hub for the event flow.
     /// </summary>
     public static class EventManager
     {
+        public static event Action<Enums.Notification> OnNewNotification;
+
+        public static void NewNotificationInvoke(Enums.Notification n)
+        {
+            OnNewNotification?.Invoke(n);
+        }
         public delegate void RequestLoadByQuality(Enums.TextureQuality quality);
 
         public static event RequestLoadByQuality OnRequestLoadByQuality;
