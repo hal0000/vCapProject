@@ -8,11 +8,13 @@
             Texture_1024 = 1,
             Texture_2048 = 2
         }
+
         public enum SceneVariant
         {
             Catalog_A = 0,
             Catalog_B = 1
         }
+
         public enum LoaderPhase
         {
             Idle,
@@ -72,7 +74,14 @@
             // --- Success / Info ---
             CatalogSwitchSuccess,
             ModuleLoaded,
-            ModuleUnloaded
+            ModuleUnloaded,
+            AlreadyCurrentQuality,
+            AlreadyCurrentScene,
+            NoChange,
+            ModuleAlreadyLoaded,
+            ModuleNotLoaded,
+            Busy
+
         }
     }
 }

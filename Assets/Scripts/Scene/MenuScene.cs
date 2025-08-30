@@ -41,19 +41,23 @@ namespace Scene
             _sceneService = _gm.SceneService;
             EventManager.OnCatalogCommitted += RebuildSceneAssetControllers;
         }
+
         public override void OnDestroy()
         {
             base.OnDestroy();
             EventManager.OnCatalogCommitted -= RebuildSceneAssetControllers;
         }
+
         public void ChangeQuality(int index)
         {
             ChangeTextureQuality((Enums.TextureQuality)index);
         }
+
         public void ChangeScene(int index)
         {
             ChangeSceneByType((Enums.SceneVariant)index);
         }
+
         private bool _requestInFlight;
 
         /// <summary>
@@ -64,7 +68,7 @@ namespace Scene
         {
             if (_requestInFlight) return;
             _requestInFlight = true;
-            
+
             // 1) Preflight: estimate size (optional but useful for NoSpace)
             var api = await RequestQualityChangeAsync(type);
             if (!api.success)
@@ -86,16 +90,18 @@ namespace Scene
                 _requestInFlight = false;
                 return;
             }
+
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             EventManager.RequestLoadByQualityInvoke(type);
 
             _requestInFlight = false;
         }
+
         public async void ChangeSceneByType(Enums.SceneVariant variant)
         {
             if (_requestInFlight) return;
             _requestInFlight = true;
-            
+
             // 1) Preflight: estimate size (optional but useful for NoSpace)
             var api = await RequestSceneChangeAsync(variant);
             if (!api.success)
@@ -115,10 +121,12 @@ namespace Scene
                 _requestInFlight = false;
                 return;
             }
+
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             EventManager.RequestLoadSceneInvoke(variant);
             _requestInFlight = false;
         }
+
         public override void Start()
         {
             base.Start();
@@ -129,7 +137,8 @@ namespace Scene
         ///     Dry-run: load target catalog, locate the scene, (optional) clear dependency cache for test,
         ///     ask Addressables for download size. Clean up everything.
         /// </summary>
-        private async Task<(bool success, long requiredBytes, int errorCode)> RequestQualityChangeAsync(Enums.TextureQuality type)
+        private async Task<(bool success, long requiredBytes, int errorCode)> RequestQualityChangeAsync(
+            Enums.TextureQuality type)
         {
             var catalogUrl = _sceneService.GetCatalogUrl(_sceneService.CurrentSceneVariant, type);
             if (string.IsNullOrEmpty(catalogUrl)) return (false, 0L, 400);
@@ -140,11 +149,15 @@ namespace Scene
                 SafeRelease(catH);
                 return (false, 0L, 503);
             }
+
             var locator = catH.Result;
             try
             {
-                var core = (_sceneService.CurrentSceneVariant == Enums.SceneVariant.Catalog_B) ? Enums.AddressLabel.B : Enums.AddressLabel.A;
-                if (!locator.Locate(core.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
+                var core = _sceneService.CurrentSceneVariant == Enums.SceneVariant.Catalog_B
+                    ? Enums.AddressLabel.B
+                    : Enums.AddressLabel.A;
+                if (!locator.Locate(core.ToString(), typeof(SceneInstance), out var locs) || locs == null ||
+                    locs.Count == 0)
                     return (false, 0L, 404);
                 var sceneLoc = ChooseSceneLocation(locs);
                 var sceneLocList = new List<IResourceLocation> { sceneLoc };
@@ -154,18 +167,23 @@ namespace Scene
                 SafeRelease(sizeH);
                 return (true, bytes, 0);
             }
-            catch { return (false, 0L, 500); }
+            catch
+            {
+                return (false, 0L, 500);
+            }
             finally
             {
                 if (locator != null) Addressables.RemoveResourceLocator(locator);
                 SafeRelease(catH);
             }
         }
+
         /// <summary>
         ///     Dry-run: load target catalog, locate the scene, (optional) clear dependency cache for test,
         ///     ask Addressables for download size. Clean up everything.
         /// </summary>
-        private async Task<(bool success, long requiredBytes, int errorCode)> RequestSceneChangeAsync(Enums.SceneVariant variant)
+        private async Task<(bool success, long requiredBytes, int errorCode)> RequestSceneChangeAsync(
+            Enums.SceneVariant variant)
         {
             var catalogUrl = _sceneService.GetCatalogUrl(variant, _sceneService.CurrentTextureQuality);
             if (string.IsNullOrEmpty(catalogUrl)) return (false, 0L, 400);
@@ -176,11 +194,13 @@ namespace Scene
                 SafeRelease(catH);
                 return (false, 0L, 503);
             }
+
             var locator = catH.Result;
             try
             {
-                var core = (variant == Enums.SceneVariant.Catalog_B) ? Enums.AddressLabel.B : Enums.AddressLabel.A;
-                if (!locator.Locate(core.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
+                var core = variant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+                if (!locator.Locate(core.ToString(), typeof(SceneInstance), out var locs) || locs == null ||
+                    locs.Count == 0)
                     return (false, 0L, 404);
                 var sceneLoc = ChooseSceneLocation(locs);
                 var sceneLocList = new List<IResourceLocation> { sceneLoc };
@@ -190,13 +210,17 @@ namespace Scene
                 SafeRelease(sizeH);
                 return (true, bytes, 0);
             }
-            catch { return (false, 0L, 500); }
+            catch
+            {
+                return (false, 0L, 500);
+            }
             finally
             {
                 if (locator != null) Addressables.RemoveResourceLocator(locator);
                 SafeRelease(catH);
             }
         }
+
         private static IResourceLocation ChooseSceneLocation(IList<IResourceLocation> locs)
         {
             if (locs.Count == 1) return locs[0];
@@ -209,6 +233,7 @@ namespace Scene
                 best = locs[i];
                 bestKey = k;
             }
+
             return best;
         }
 
@@ -216,7 +241,7 @@ namespace Scene
 
         public void RebuildSceneAssetControllers()
         {
-            for (int i = ListContent.childCount - 1; i >= 0; i--)
+            for (var i = ListContent.childCount - 1; i >= 0; i--)
                 Destroy(ListContent.GetChild(i).gameObject);
 
             var labels = _sceneService.GetAvailableModuleLabels();
@@ -290,7 +315,8 @@ namespace Scene
                     return freeBytes >= bytesNeeded;
                 }
 
-                LoggerExtra.LogWarning("[MenuScene] Could not resolve drive for free space check. Assuming enough space.");
+                LoggerExtra.LogWarning(
+                    "[MenuScene] Could not resolve drive for free space check. Assuming enough space.");
                 return true;
 #elif UNITY_IOS
                 LoggerExtra.LogWarning("[MenuScene] iOS free space check requires a native plugin. Assuming enough space for now.");
@@ -305,6 +331,16 @@ namespace Scene
                 LoggerExtra.LogWarning($"[MenuScene] Free space check failed: {ex.Message}. Assuming enough space.");
                 return true;
             }
+        }
+
+        public void CleanCache()
+        {
+            _sceneService.ClearAllCaches();
+        }
+
+        public void UnloadAll()
+        {
+            _sceneService.UnloadAllAsync();
         }
     }
 }

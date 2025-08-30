@@ -60,8 +60,10 @@ namespace UI
             {
                 _scaleTween.Complete();
                 var tr = transform;
-                _scaleTween = Tween.Scale(tr, tr.localScale, _originalScale * _scaleUpSize, _animationDuration, Ease.OutSine);
+                _scaleTween = Tween.Scale(tr, tr.localScale, _originalScale * _scaleUpSize, _animationDuration,
+                    Ease.OutSine);
             }
+
             if (!NoEffect) _uiEffect.samplingScale = 1;
         }
 
@@ -74,6 +76,7 @@ namespace UI
                 var tr = transform;
                 _scaleTween = Tween.Scale(tr, tr.localScale, _originalScale, _animationDuration, Ease.OutSine);
             }
+
             if (!NoEffect) _uiEffect.samplingScale = 0;
         }
 
@@ -87,6 +90,7 @@ namespace UI
                 var tr = transform;
                 _scaleTween = Tween.Scale(tr, tr.localScale, _originalScale, _animationDuration, Ease.OutSine);
             }
+
             if (!NoEffect) _uiEffect.samplingScale = 0;
         }
 

@@ -131,7 +131,7 @@ namespace UI
             // Force the TextMeshProUGUI to update its layout (in case it hasn't been updated yet).
             LayoutRebuilder.ForceRebuildLayoutImmediate(_notificationText.rectTransform);
             // Use the preferredWidth property to get the ideal width for the text.
-            float textWidth = _notificationText.preferredWidth;
+            var textWidth = _notificationText.preferredWidth;
             // Set the background width to the text width plus the horizontal padding.
             _backgroundRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, textWidth + _horizontalPadding);
         }
