@@ -67,12 +67,29 @@ namespace UI
         {
             EventManager.OnLoaderStatusChanged += HandleLoaderStatus;
             EventManager.OnLoadProgress += HandleLoadProgress;
+            EventManager.OnLoadProgressDetailed += HandleLoadProgressDetailed;
+        }
+
+        private void HandleLoadProgressDetailed(Enums.LoaderPhase phase, float progress01, string message)
+        {
+            SmoothProgressTo(progress01);
+            if (string.IsNullOrEmpty(message)) return;
+            switch (phase)
+            {
+                case Enums.LoaderPhase.DownloadingDependencies:
+                    SetStatus($"Downloading… {message}");
+                    break;
+                case Enums.LoaderPhase.SceneLoading:
+                    SetStatus($"Loading scene… {message}");
+                    break;
+            }
         }
 
         private void OnDisable()
         {
             EventManager.OnLoaderStatusChanged -= HandleLoaderStatus;
             EventManager.OnLoadProgress -= HandleLoadProgress;
+            EventManager.OnLoadProgressDetailed -= HandleLoadProgressDetailed;
 
             if (_fadeTween.isAlive) _fadeTween.Stop();
             if (_progressTween.isAlive) _progressTween.Stop();

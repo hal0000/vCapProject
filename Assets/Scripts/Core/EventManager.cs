@@ -13,6 +13,19 @@ namespace Core
         {
             OnNewNotification?.Invoke(n);
         }
+        public static event Action<Enums.LoaderPhase, float> OnLoadProgress;
+        public static event Action<Enums.LoaderPhase, float, string> OnLoadProgressDetailed;
+        public static void LoadProgressInvoke(Enums.LoaderPhase phase, float p) 
+        {
+            OnLoadProgress?.Invoke(phase, p);
+            OnLoadProgressDetailed?.Invoke(phase, p, null);
+        }
+        public static void LoadProgressInvoke(Enums.LoaderPhase phase, float p, string msg) 
+        {
+            OnLoadProgress?.Invoke(phase, p);
+            OnLoadProgressDetailed?.Invoke(phase, p, msg);
+        }
+
         public delegate void RequestLoadByQuality(Enums.TextureQuality quality);
 
         public static event RequestLoadByQuality OnRequestLoadByQuality;
@@ -33,13 +46,6 @@ namespace Core
         public static void CatalogCommittedInvoke() => OnCatalogCommitted?.Invoke();
 
         public delegate void LoadProgress(Enums.LoaderPhase phase, float progress01);
-
-        public static event LoadProgress OnLoadProgress;
-
-        public static void LoadProgressInvoke(Enums.LoaderPhase phase, float progress01)
-        {
-            OnLoadProgress?.Invoke(phase, progress01);
-        }
 
         public static event Action<Enums.LoaderStatus> OnLoaderStatusChanged;
 

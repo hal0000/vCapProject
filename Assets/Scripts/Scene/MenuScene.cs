@@ -69,6 +69,7 @@ namespace Scene
             var api = await RequestQualityChangeAsync(type);
             if (!api.success)
             {
+                EventManager.NewNotificationInvoke(Enums.Notification.DownloadSizeQueryFailed);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Error);
                 EventManager.LoadProgressInvoke(Enums.LoaderPhase.Idle, 1f);
                 _requestInFlight = false;
@@ -79,6 +80,7 @@ namespace Scene
             var requiredWithMargin = api.requiredBytes > 0 ? api.requiredBytes + SafetyMarginBytes : 0;
             if (!HasEnoughSpace(requiredWithMargin))
             {
+                EventManager.NewNotificationInvoke(Enums.Notification.NotEnoughSpace);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.NoSpace);
                 EventManager.LoadProgressInvoke(Enums.LoaderPhase.Idle, 1f);
                 _requestInFlight = false;

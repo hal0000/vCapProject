@@ -36,74 +36,87 @@ namespace Core
             var c = variant == Enums.SceneVariant.Catalog_A ? "A" : "B";
             return $"{HostBase}/{Platform}/{q}/catalog_{c}_{q}.bin";
         }
-public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
-{
-    if (_opInFlight) return;
-    if (string.IsNullOrEmpty(catalogUrl)) { Fail("[SceneService] SwitchCatalog: URL empty."); return; }
-    if (_currentLocator != null && _currentCatalogUrl == catalogUrl) return;
-
-    _opInFlight = true;
-    EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
-
-    var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
-    var restoreOrder = (preserveOpen && _loaded.Count > 0)
-        ? _loaded.Keys.OrderByDescending(l => l == core).ToList()
-        : new List<Enums.AddressLabel> { core };
-
-    try
-    {
-        ReportDownload(0f);
-        EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.AttemptingToDownloadCatalog);
-
-        var initH = Addressables.InitializeAsync();
-        await initH.Task;
-
-        var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
-        await catH.Task;
-        if (catH.Status != AsyncOperationStatus.Succeeded || catH.Result == null)
+        public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
         {
-            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadignCatalogFailed);
-            throw new Exception("Failed to load catalog");
-        }
-        EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadingCatalogSuccessful);
-
-        var newLocator = catH.Result;
-
-        await DownloadManyAndReportAsync(newLocator, restoreOrder);
-
-        if (_loaded.Count > 0)
-        {
-            foreach (var kv in _loaded)
+            if (_opInFlight) return;
+            if (string.IsNullOrEmpty(catalogUrl))
             {
-                var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
-                await unloadH.Task;
+                EventManager.NewNotificationInvoke(Enums.Notification.InvalidCatalogUrl);
+                Fail("[SceneService] SwitchCatalog: URL empty."); return;
             }
-            _loaded.Clear();
-            await Resources.UnloadUnusedAssets();
-            GC.Collect();
+
+            if (_currentLocator != null && _currentCatalogUrl == catalogUrl)
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.CatalogInitFailed);
+                return;
+            }
+
+            _opInFlight = true;
+            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
+
+            var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+            var restoreOrder = (preserveOpen && _loaded.Count > 0)
+                ? _loaded.Keys.OrderByDescending(l => l == core).ToList()
+                : new List<Enums.AddressLabel> { core };
+
+            try
+            {
+                ReportDownload(0f);
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.AttemptingToDownloadCatalog);
+
+                var initH = Addressables.InitializeAsync();
+                await initH.Task;
+
+                var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
+                await catH.Task;
+                if (catH.Status != AsyncOperationStatus.Succeeded || catH.Result == null)
+                {
+                    EventManager.NewNotificationInvoke(Enums.Notification.CatalogInitFailed);
+                    EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadignCatalogFailed);
+                    throw new Exception("Failed to load catalog");
+                }
+                EventManager.NewNotificationInvoke(Enums.Notification.CatalogSwitchSuccess);
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadingCatalogSuccessful);
+
+                var newLocator = catH.Result;
+
+                await DownloadManyAndReportAsync(newLocator, restoreOrder);
+
+                if (_loaded.Count > 0)
+                {
+                    foreach (var kv in _loaded)
+                    {
+                        var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
+                        await unloadH.Task;
+                    }
+                    _loaded.Clear();
+                    await Resources.UnloadUnusedAssets();
+                    GC.Collect();
+                }
+
+                if (_currentLocator != null) { Addressables.RemoveResourceLocator(_currentLocator); _currentLocator = null; }
+                if (_currentCatalogHandle.HasValue) { SafeRelease(_currentCatalogHandle.Value); _currentCatalogHandle = null; }
+
+                _currentLocator = newLocator;
+                _currentCatalogHandle = catH;
+                _currentCatalogUrl = catalogUrl;
+                await LoadManyAndReportAsync(_currentLocator, restoreOrder);
+                EventManager.CatalogCommittedInvoke();
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
+            }
+            catch (Exception ex)
+            {
+                bool isNet = IsNet(ex);
+                EventManager.NewNotificationInvoke(isNet ? Enums.Notification.NoInternet : Enums.Notification.CatalogSwitchFailed);
+                LoggerExtra.LogError($"[SceneService] SwitchCatalog failed: {ex.Message}");
+                EventManager.LoaderStatusChangedInvoke(isNet? Enums.LoaderStatus.NoInternet : Enums.LoaderStatus.Error);
+            }
+            finally
+            {
+                _opInFlight = false;
+                ReportIdle();
+            }
         }
-
-        if (_currentLocator != null) { Addressables.RemoveResourceLocator(_currentLocator); _currentLocator = null; }
-        if (_currentCatalogHandle.HasValue) { SafeRelease(_currentCatalogHandle.Value); _currentCatalogHandle = null; }
-
-        _currentLocator = newLocator;
-        _currentCatalogHandle = catH;
-        _currentCatalogUrl = catalogUrl;
-        await LoadManyAndReportAsync(_currentLocator, restoreOrder);
-        EventManager.CatalogCommittedInvoke();
-        EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
-    }
-    catch (Exception ex)
-    {
-        LoggerExtra.LogError($"[SceneService] SwitchCatalog failed: {ex.Message}");
-        EventManager.LoaderStatusChangedInvoke(IsNet(ex) ? Enums.LoaderStatus.NoInternet : Enums.LoaderStatus.Error);
-    }
-    finally
-    {
-        _opInFlight = false;
-        ReportIdle();
-    }
-}
 
 
         public Task LoadModuleAsync(Enums.AddressLabel label, bool makeActive = false)
@@ -121,6 +134,7 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
             {
                 var unloadH = Addressables.UnloadSceneAsync(h, true);
                 await unloadH.Task;
+                EventManager.NewNotificationInvoke(Enums.Notification.ModuleUnloaded);
                 _loaded.Remove(label);
                 await Resources.UnloadUnusedAssets();
                 GC.Collect();
@@ -128,6 +142,7 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
             }
             catch (Exception ex)
             {
+                EventManager.NewNotificationInvoke(Enums.Notification.SceneUnloadFailed);
                 Fail($"[SceneService] Unload '{label}' failed: {ex.Message}");
             }
             finally
@@ -160,19 +175,18 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
         public bool ClearAllCaches()
         {
             var ok = Caching.ClearCache();
+            if (!ok) EventManager.NewNotificationInvoke(Enums.Notification.CacheClearFailed);
             LoggerExtra.Log($"[SceneService] Caching.ClearCache() => {ok}");
             if (_currentLocator != null)
             {
                 Addressables.RemoveResourceLocator(_currentLocator);
                 _currentLocator = null;
             }
-
             if (_currentCatalogHandle.HasValue)
             {
                 SafeRelease(_currentCatalogHandle.Value);
                 _currentCatalogHandle = null;
             }
-
             _currentCatalogUrl = null;
             return ok;
         }
@@ -190,13 +204,22 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
         private async Task LoadByLabelInternal(Enums.AddressLabel label, bool makeActive)
         {
             if (_opInFlight) return;
-            if (_currentLocator == null) LoggerExtra.LogWarning("[SceneService] No catalog loaded.");
+            if (_currentLocator == null)
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.LabelNotFound);
+                LoggerExtra.LogWarning("[SceneService] No catalog loaded.");
+                return;
+            }
             if (_loaded.ContainsKey(label)) return;
             _opInFlight = true;
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             try
             {
-                if (!_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0) throw new Exception($"Label '{label}' not found in catalog.");
+                if (!_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
+                {
+                    EventManager.NewNotificationInvoke(Enums.Notification.LabelNotFound);
+                    throw new Exception($"Label '{label}' not found in catalog.");
+                }
                 var sceneLoc = ChooseSceneLocation(locs);
                 var bytes = await GetSizeAsync(sceneLoc);
                 if (bytes > 0)
@@ -205,15 +228,20 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
                     EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Downloading);
                     while (!dl.IsDone)
                     {
-                        ReportDownload(dl.PercentComplete);
+                        ReportDownload(dl.PercentComplete,$"{FormatBytes((long)(bytes * dl.PercentComplete))} / {FormatBytes(bytes)}");
                         await Task.Yield();
                     }
-                    if (dl.Status != AsyncOperationStatus.Succeeded) throw new Exception("Failed to download dependencies.");
+
+                    if (dl.Status != AsyncOperationStatus.Succeeded)
+                    {
+                        EventManager.NewNotificationInvoke(Enums.Notification.DependenciesDownloadFailed);
+                        throw new Exception("Failed to download dependencies.");
+                    }
                     Addressables.Release(dl);
                 }
                 else
                 {
-                    ReportDownload(1f);
+                    ReportDownload(1f, "0 B / 0 B");
                 }
                 var loadH = Addressables.LoadSceneAsync(sceneLoc, LoadSceneMode.Additive, true);
                 while (!loadH.IsDone)
@@ -221,19 +249,25 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
                     ReportLoad(loadH.PercentComplete);
                     await Task.Yield();
                 }
-                if (loadH.Status != AsyncOperationStatus.Succeeded || !loadH.Result.Scene.isLoaded) throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
+
+                if (loadH.Status != AsyncOperationStatus.Succeeded || !loadH.Result.Scene.isLoaded)
+                {
+                    EventManager.NewNotificationInvoke(Enums.Notification.SceneLoadFailed);
+                    throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
+                }
                 _loaded[label] = loadH;
                 if (makeActive) SceneManager.SetActiveScene(loadH.Result.Scene);
                 ReportLoad(1f);
                 await Resources.UnloadUnusedAssets();
                 GC.Collect();
+                EventManager.NewNotificationInvoke(Enums.Notification.ModuleLoaded);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
             }
             catch (Exception ex)
             {
+                EventManager.NewNotificationInvoke(IsNet(ex) ? Enums.Notification.NoInternet : Enums.Notification.SceneLoadFailed);
                 Fail($"[SceneService] Load '{label}' failed: {ex.Message}");
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadignCatalogFailed);
-
             }
             finally
             {
@@ -257,14 +291,16 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
                 sizes.Add(s);
                 totalBytes += s;
             }
+            long accumulatedBytes = 0;
             var accumulated = 0f;
             for (var i = 0; i < locs.Count; i++)
             {
                 var bytes = sizes[i];
                 if (bytes <= 0)
                 {
+                    var msg0 = totalBytes > 0 ? $"{FormatBytes(accumulatedBytes)} / {FormatBytes(totalBytes)}" : null;
                     if (totalBytes > 0) accumulated += (float)bytes / totalBytes;
-                    ReportDownload(accumulated);
+                    ReportDownload(accumulated, msg0);
                     continue;
                 }
                 var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { locs[i] }, false);
@@ -272,15 +308,23 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
                 {
                     var local = dl.PercentComplete;
                     var weighted = totalBytes > 0 ? (float)bytes / totalBytes * local : 1f / labels.Count * local;
-                    ReportDownload(accumulated + weighted);
+                    var overall = accumulated + weighted;
+                    var done = accumulatedBytes + (long)(bytes * local);
+                    var msg = totalBytes > 0 ? $"{FormatBytes(done)} / {FormatBytes(totalBytes)}" : null;
+                    ReportDownload(overall, msg);
                     await Task.Yield();
                 }
                 if (dl.Status != AsyncOperationStatus.Succeeded) throw new Exception("Failed to download dependencies.");
-                Addressables.Release(dl); // MANUEL release
+                Addressables.Release(dl);
+
+                accumulatedBytes += bytes;
                 accumulated += totalBytes > 0 ? (float)bytes / totalBytes : 1f / labels.Count;
-                ReportDownload(accumulated);
+
+                var msgAfter = totalBytes > 0 ? $"{FormatBytes(accumulatedBytes)} / {FormatBytes(totalBytes)}" : null;
+                ReportDownload(accumulated, msgAfter);
             }
-            ReportDownload(1f);
+            var msgDone = totalBytes > 0 ? $"{FormatBytes(totalBytes)} / {FormatBytes(totalBytes)}" : null;
+            ReportDownload(1f, msgDone);
         }
 
         private async Task LoadManyAndReportAsync(IResourceLocator locator, List<Enums.AddressLabel> labels)
@@ -350,13 +394,11 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Error);
             ReportIdle();
         }
-
-        private void ReportDownload(float normalized01)
+        private void ReportDownload(float normalized01, string message = null) 
         {
             var p = Mathf.Clamp01(normalized01) * 0.5f;
-            EventManager.LoadProgressInvoke(Enums.LoaderPhase.DownloadingDependencies, p);
+            EventManager.LoadProgressInvoke(Enums.LoaderPhase.DownloadingDependencies, p, message);
         }
-
         private void ReportLoad(float normalized01)
         {
             var p = 0.5f + Mathf.Clamp01(normalized01) * 0.5f;
@@ -407,6 +449,14 @@ public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
                     result.Add(label);
             }
             return result;
+        }
+        private static string FormatBytes(long bytes)
+        {
+            const double KB = 1024.0, MB = 1024.0 * 1024.0, GB = 1024.0 * 1024.0 * 1024.0;
+            if (bytes >= GB) return (bytes / GB).ToString("0.00") + " GB";
+            if (bytes >= MB) return (bytes / MB).ToString("0.00") + " MB";
+            if (bytes >= KB) return (bytes / KB).ToString("0") + " KB";
+            return bytes + " B";
         }
 
     }
