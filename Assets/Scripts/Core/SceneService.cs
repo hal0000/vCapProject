@@ -25,7 +25,7 @@ namespace Core
         private const string Platform = "StandaloneWindows64";
         public Enums.SceneVariant CurrentSceneVariant = Enums.SceneVariant.Catalog_A;
         public Enums.TextureQuality CurrentTextureQuality = Enums.TextureQuality.Texture_1024;
-
+        private bool _initCalled = false;
         public string GetCatalogUrl(Enums.SceneVariant variant, Enums.TextureQuality quality)
         {
             var q = quality == Enums.TextureQuality.Texture_512 ? "512" :
@@ -36,7 +36,7 @@ namespace Core
 
         public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
         {
-            if (_opInFlight) return;
+            if (_opInFlight) { EventManager.NewNotificationInvoke(Enums.Notification.Busy); return; }
             if (string.IsNullOrEmpty(catalogUrl))
             {
                 EventManager.NewNotificationInvoke(Enums.Notification.InvalidCatalogUrl);
@@ -44,15 +44,19 @@ namespace Core
                 return;
             }
 
-            if (_currentLocator != null && _currentCatalogUrl == catalogUrl) return;
+            if (!string.IsNullOrEmpty(_currentCatalogUrl) &&
+                string.Equals(_currentCatalogUrl, catalogUrl, StringComparison.Ordinal))
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.NoChange);
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
+                return;
+            }
 
             _opInFlight = true;
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
 
-            var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B
-                ? Enums.AddressLabel.B
-                : Enums.AddressLabel.A;
-            var restoreOrder = preserveOpen && _loaded.Count > 0
+            var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+            var restoreOrder = (preserveOpen && _loaded.Count > 0)
                 ? _loaded.Keys.OrderByDescending(l => l == core).ToList()
                 : new List<Enums.AddressLabel> { core };
 
@@ -73,44 +77,43 @@ namespace Core
                     throw new Exception("Failed to load catalog");
                 }
 
+                EventManager.NewNotificationInvoke(Enums.Notification.CatalogSwitchSuccess);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadingCatalogSuccessful);
 
                 var newLocator = catH.Result;
 
                 await DownloadManyAndReportAsync(newLocator, restoreOrder);
-                await UnloadOpenScenesInternalAsync();
 
-                if (_currentLocator != null)
+                if (_loaded.Count > 0)
                 {
-                    Addressables.RemoveResourceLocator(_currentLocator);
-                    _currentLocator = null;
+                    foreach (var kv in _loaded)
+                    {
+                        var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
+                        await unloadH.Task;
+                    }
+                    _loaded.Clear();
+                    await Resources.UnloadUnusedAssets();
+                    GC.Collect();
                 }
 
-                if (_currentCatalogHandle.HasValue)
-                {
-                    SafeRelease(_currentCatalogHandle.Value);
-                    _currentCatalogHandle = null;
-                }
+                if (_currentLocator != null) { Addressables.RemoveResourceLocator(_currentLocator); _currentLocator = null; }
+                if (_currentCatalogHandle.HasValue) { SafeRelease(_currentCatalogHandle.Value); _currentCatalogHandle = null; }
 
                 _currentLocator = newLocator;
                 _currentCatalogHandle = catH;
                 _currentCatalogUrl = catalogUrl;
 
                 await LoadManyAndReportAsync(_currentLocator, restoreOrder);
+
                 EventManager.CatalogCommittedInvoke();
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
-                EventManager.NewNotificationInvoke(Enums.Notification.CatalogSwitchSuccess);
             }
             catch (Exception ex)
             {
-                var isNet = IsNet(ex);
-                EventManager.NewNotificationInvoke(isNet
-                    ? Enums.Notification.NoInternet
-                    : Enums.Notification.CatalogSwitchFailed);
+                bool isNet = IsNet(ex);
+                EventManager.NewNotificationInvoke(isNet ? Enums.Notification.NoInternet : Enums.Notification.CatalogSwitchFailed);
                 LoggerExtra.LogError($"[SceneService] SwitchCatalog failed: {ex.Message}");
-                EventManager.LoaderStatusChangedInvoke(isNet
-                    ? Enums.LoaderStatus.NoInternet
-                    : Enums.LoaderStatus.Error);
+                EventManager.LoaderStatusChangedInvoke(isNet ? Enums.LoaderStatus.NoInternet : Enums.LoaderStatus.Error);
             }
             finally
             {
@@ -119,6 +122,7 @@ namespace Core
             }
         }
 
+
         public Task LoadModuleAsync(Enums.AddressLabel label, bool makeActive = false)
         {
             return LoadByLabelInternal(label, makeActive);
@@ -126,18 +130,25 @@ namespace Core
 
         public async Task UnloadModuleAsync(Enums.AddressLabel label)
         {
-            if (_opInFlight) return;
-            if (!_loaded.TryGetValue(label, out var h)) return;
+            if (_opInFlight) { EventManager.NewNotificationInvoke(Enums.Notification.Busy); return; }
+            if (!_loaded.TryGetValue(label, out var h))
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.ModuleNotLoaded);
+                return;
+            }
+
             _opInFlight = true;
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             try
             {
                 var unloadH = Addressables.UnloadSceneAsync(h, true);
                 await unloadH.Task;
-                EventManager.NewNotificationInvoke(Enums.Notification.ModuleUnloaded);
+
                 _loaded.Remove(label);
                 await Resources.UnloadUnusedAssets();
                 GC.Collect();
+
+                EventManager.NewNotificationInvoke(Enums.Notification.ModuleUnloaded);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
             }
             catch (Exception ex)
@@ -148,9 +159,10 @@ namespace Core
             finally
             {
                 _opInFlight = false;
+                ReportIdle();
             }
         }
-
+        
         public async Task UnloadAllAsync()
         {
             if (_opInFlight) return;
@@ -213,7 +225,8 @@ namespace Core
 
         private async Task LoadByLabelInternal(Enums.AddressLabel label, bool makeActive)
         {
-            if (_opInFlight) return;
+            if (_opInFlight) { EventManager.NewNotificationInvoke(Enums.Notification.Busy); return; }
+
             if (_currentLocator == null)
             {
                 EventManager.NewNotificationInvoke(Enums.Notification.LabelNotFound);
@@ -221,13 +234,17 @@ namespace Core
                 return;
             }
 
-            if (_loaded.ContainsKey(label)) return;
+            if (_loaded.ContainsKey(label))
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.ModuleAlreadyLoaded);
+                return;
+            }
+
             _opInFlight = true;
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             try
             {
-                if (!_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) || locs == null ||
-                    locs.Count == 0)
+                if (!_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
                 {
                     EventManager.NewNotificationInvoke(Enums.Notification.LabelNotFound);
                     throw new Exception($"Label '{label}' not found in catalog.");
@@ -235,14 +252,15 @@ namespace Core
 
                 var sceneLoc = ChooseSceneLocation(locs);
                 var bytes = await GetSizeAsync(sceneLoc);
+
                 if (bytes > 0)
                 {
                     var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { sceneLoc }, false);
                     EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Downloading);
+
                     while (!dl.IsDone)
                     {
-                        ReportDownload(dl.PercentComplete,
-                            $"{FormatBytes((long)(bytes * dl.PercentComplete))} / {FormatBytes(bytes)}");
+                        ReportDownload(dl.PercentComplete, $"{FormatBytes((long)(bytes * dl.PercentComplete))} / {FormatBytes(bytes)}");
                         await Task.Yield();
                     }
 
@@ -269,24 +287,22 @@ namespace Core
                 if (loadH.Status != AsyncOperationStatus.Succeeded || !loadH.Result.Scene.isLoaded)
                 {
                     EventManager.NewNotificationInvoke(Enums.Notification.SceneLoadFailed);
-                    throw new Exception(loadH.OperationException != null
-                        ? loadH.OperationException.Message
-                        : "Failed to load scene");
+                    throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
                 }
 
                 _loaded[label] = loadH;
                 if (makeActive) SceneManager.SetActiveScene(loadH.Result.Scene);
+
                 ReportLoad(1f);
                 await Resources.UnloadUnusedAssets();
                 GC.Collect();
+
                 EventManager.NewNotificationInvoke(Enums.Notification.ModuleLoaded);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
             }
             catch (Exception ex)
             {
-                EventManager.NewNotificationInvoke(IsNet(ex)
-                    ? Enums.Notification.NoInternet
-                    : Enums.Notification.SceneLoadFailed);
+                EventManager.NewNotificationInvoke(IsNet(ex) ? Enums.Notification.NoInternet : Enums.Notification.SceneLoadFailed);
                 Fail($"[SceneService] Load '{label}' failed: {ex.Message}");
             }
             finally
@@ -295,6 +311,7 @@ namespace Core
                 ReportIdle();
             }
         }
+
 
         private async Task DownloadManyAndReportAsync(IResourceLocator locator, List<Enums.AddressLabel> labels)
         {
@@ -479,12 +496,23 @@ namespace Core
 
         private async void HandleRequestByQuality(Enums.TextureQuality quality)
         {
+            if (quality == CurrentTextureQuality)
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.NoChange);
+                return;
+            }
             CurrentTextureQuality = quality;
             await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), true);
         }
 
         private async void HandleRequestByScene(Enums.SceneVariant variant)
         {
+            if (_initCalled && variant == CurrentSceneVariant)
+            {
+                EventManager.NewNotificationInvoke(Enums.Notification.NoChange);
+                return;
+            }
+            _initCalled = true;
             CurrentSceneVariant = variant;
             await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), false);
         }

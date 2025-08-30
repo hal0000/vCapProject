@@ -90,10 +90,7 @@ namespace Scene
                 _requestInFlight = false;
                 return;
             }
-
-            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             EventManager.RequestLoadByQualityInvoke(type);
-
             _requestInFlight = false;
         }
 
@@ -121,8 +118,6 @@ namespace Scene
                 _requestInFlight = false;
                 return;
             }
-
-            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             EventManager.RequestLoadSceneInvoke(variant);
             _requestInFlight = false;
         }

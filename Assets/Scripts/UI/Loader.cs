@@ -10,6 +10,7 @@ namespace UI
     [DefaultExecutionOrder(-1001)]
     public class Loader : UIElement
     {
+
         public Image ProgressFill;
 
         public TMP_Text StatusText;
@@ -96,7 +97,6 @@ namespace UI
             ApplyOffsets(0f);
             SetStatus(string.Empty);
         }
-
         private void HandleLoaderStatus(Enums.LoaderStatus status)
         {
             switch (status)
@@ -175,11 +175,12 @@ namespace UI
         public override void Show()
         {
             base.Show();
-        }
 
+        }
         public override void Hide()
         {
             base.Hide();
+
         }
 
         private void SmoothProgressTo(float target01)
@@ -188,12 +189,11 @@ namespace UI
             if (Mathf.Abs(target01 - _visualProgress) < 0.004f) return;
             if (_progressTween.isAlive) _progressTween.Stop();
 
-            _progressTween = Tween.Custom(this, _visualProgress, target01, progressSmoothTime,
-                static (Loader self, float v) =>
-                {
-                    self._visualProgress = v;
-                    self.ApplyOffsets(v);
-                });
+            _progressTween = Tween.Custom(this, _visualProgress, target01, progressSmoothTime, static (Loader self, float v) =>
+            {
+                self._visualProgress = v;
+                self.ApplyOffsets(v);
+            });
         }
 
         private void ApplyOffsets(float progress01)

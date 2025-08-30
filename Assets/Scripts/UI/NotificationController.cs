@@ -84,6 +84,7 @@ namespace UI
                 Enums.Notification.CacheClearFailed => "Cache clear failed.",
                 Enums.Notification.CatalogSwitchSuccess => "Catalog switched.",
                 Enums.Notification.ModuleLoaded => "Module loaded.",
+                Enums.Notification.NoChange => "NothingChanged",
                 Enums.Notification.ModuleUnloaded => "Module unloaded.",
                 _ => _notificationText.text
             };
@@ -121,6 +122,7 @@ namespace UI
             yield return new WaitForSeconds(3);
             Hide();
             _lastType = Enums.Notification.None;
+            _notificationText.text = "";
         }
 
         /// <summary>
