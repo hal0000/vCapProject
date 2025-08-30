@@ -39,13 +39,21 @@ namespace Scene
             base.Awake();
             _gm.CurrentScene = this;
             _sceneService = _gm.SceneService;
+            EventManager.OnCatalogCommitted += RebuildSceneAssetControllers;
         }
-
+        public override void OnDestroy()
+        {
+            base.OnDestroy();
+            EventManager.OnCatalogCommitted -= RebuildSceneAssetControllers;
+        }
         public void ChangeQuality(int index)
         {
             ChangeTextureQuality((Enums.TextureQuality)index);
         }
-
+        public void ChangeScene(int index)
+        {
+            ChangeSceneByType((Enums.SceneVariant)index);
+        }
         private bool _requestInFlight;
 
         /// <summary>
@@ -56,17 +64,7 @@ namespace Scene
         {
             if (_requestInFlight) return;
             _requestInFlight = true;
-
-            // 0) Map quality, catalog URL (purely for preflight checks)
-            var catalogUrl = ResolveCatalogUrl(type);
-            if (string.IsNullOrEmpty(catalogUrl))
-            {
-                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Error);
-                EventManager.LoadProgressInvoke(Enums.LoaderPhase.Idle, 1f);
-                _requestInFlight = false;
-                return;
-            }
-
+            
             // 1) Preflight: estimate size (optional but useful for NoSpace)
             var api = await RequestQualityChangeAsync(type);
             if (!api.success)
@@ -87,15 +85,42 @@ namespace Scene
                 return;
             }
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
-            EventManager.RequestLoadByQualityInvoke(type, Enums.AddressLabel.A.ToString());
+            EventManager.RequestLoadByQualityInvoke(type);
 
             _requestInFlight = false;
         }
+        public async void ChangeSceneByType(Enums.SceneVariant variant)
+        {
+            if (_requestInFlight) return;
+            _requestInFlight = true;
+            
+            // 1) Preflight: estimate size (optional but useful for NoSpace)
+            var api = await RequestSceneChangeAsync(variant);
+            if (!api.success)
+            {
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Error);
+                EventManager.LoadProgressInvoke(Enums.LoaderPhase.Idle, 1f);
+                _requestInFlight = false;
+                return;
+            }
 
+            // 2) Free space check (+ margin)
+            var requiredWithMargin = api.requiredBytes > 0 ? api.requiredBytes + SafetyMarginBytes : 0;
+            if (!HasEnoughSpace(requiredWithMargin))
+            {
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.NoSpace);
+                EventManager.LoadProgressInvoke(Enums.LoaderPhase.Idle, 1f);
+                _requestInFlight = false;
+                return;
+            }
+            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
+            EventManager.RequestLoadSceneInvoke(variant);
+            _requestInFlight = false;
+        }
         public override void Start()
         {
             base.Start();
-            CreateSceneAssetControllers();
+            RebuildSceneAssetControllers();
         }
 
         /// <summary>
@@ -104,7 +129,7 @@ namespace Scene
         /// </summary>
         private async Task<(bool success, long requiredBytes, int errorCode)> RequestQualityChangeAsync(Enums.TextureQuality type)
         {
-            var catalogUrl = ResolveCatalogUrl(type);
+            var catalogUrl = _sceneService.GetCatalogUrl(_sceneService.CurrentSceneVariant, type);
             if (string.IsNullOrEmpty(catalogUrl)) return (false, 0L, 400);
             var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
             await catH.Task;
@@ -116,7 +141,9 @@ namespace Scene
             var locator = catH.Result;
             try
             {
-                if (!locator.Locate(Enums.AddressLabel.A.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0) return (false, 0L, 404);
+                var core = (_sceneService.CurrentSceneVariant == Enums.SceneVariant.Catalog_B) ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+                if (!locator.Locate(core.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
+                    return (false, 0L, 404);
                 var sceneLoc = ChooseSceneLocation(locs);
                 var sceneLocList = new List<IResourceLocation> { sceneLoc };
                 var sizeH = Addressables.GetDownloadSizeAsync(sceneLocList);
@@ -125,29 +152,47 @@ namespace Scene
                 SafeRelease(sizeH);
                 return (true, bytes, 0);
             }
-            catch
-            {
-                return (false, 0L, 500);
-            }
+            catch { return (false, 0L, 500); }
             finally
             {
                 if (locator != null) Addressables.RemoveResourceLocator(locator);
                 SafeRelease(catH);
             }
         }
-
         /// <summary>
-        ///     Resolve catalog URL for a given TextureQuality from serialized fields.
+        ///     Dry-run: load target catalog, locate the scene, (optional) clear dependency cache for test,
+        ///     ask Addressables for download size. Clean up everything.
         /// </summary>
-        private string ResolveCatalogUrl(Enums.TextureQuality type)
+        private async Task<(bool success, long requiredBytes, int errorCode)> RequestSceneChangeAsync(Enums.SceneVariant variant)
         {
-            var sceneService = GameManager.Instance.SceneService;
-            switch (type)
+            var catalogUrl = _sceneService.GetCatalogUrl(variant, _sceneService.CurrentTextureQuality);
+            if (string.IsNullOrEmpty(catalogUrl)) return (false, 0L, 400);
+            var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
+            await catH.Task;
+            if (catH.Status != AsyncOperationStatus.Succeeded || catH.Result == null)
             {
-                case Enums.TextureQuality.Texture_512: return sceneService.urlQ1_512;
-                case Enums.TextureQuality.Texture_1024: return sceneService.urlQ2_1024;
-                case Enums.TextureQuality.Texture_2048: return sceneService.urlQ3_2048;
-                default: return null;
+                SafeRelease(catH);
+                return (false, 0L, 503);
+            }
+            var locator = catH.Result;
+            try
+            {
+                var core = (variant == Enums.SceneVariant.Catalog_B) ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+                if (!locator.Locate(core.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
+                    return (false, 0L, 404);
+                var sceneLoc = ChooseSceneLocation(locs);
+                var sceneLocList = new List<IResourceLocation> { sceneLoc };
+                var sizeH = Addressables.GetDownloadSizeAsync(sceneLocList);
+                await sizeH.Task;
+                var bytes = sizeH.Status == AsyncOperationStatus.Succeeded ? sizeH.Result : 0;
+                SafeRelease(sizeH);
+                return (true, bytes, 0);
+            }
+            catch { return (false, 0L, 500); }
+            finally
+            {
+                if (locator != null) Addressables.RemoveResourceLocator(locator);
+                SafeRelease(catH);
             }
         }
         private static IResourceLocation ChooseSceneLocation(IList<IResourceLocation> locs)
@@ -165,20 +210,15 @@ namespace Scene
             return best;
         }
 
-        public Enums.AddressLabel[] listLabels = new[]
-        {
-            Enums.AddressLabel.A,
-            Enums.AddressLabel.Curtain,
-            Enums.AddressLabel.Props,
-            Enums.AddressLabel.Reflection,
-            Enums.AddressLabel.Furniture
-        };
-
         public AssetController AssetControllerPrefab;
 
-        public void CreateSceneAssetControllers()
+        public void RebuildSceneAssetControllers()
         {
-            foreach (var label in listLabels)
+            for (int i = ListContent.childCount - 1; i >= 0; i--)
+                Destroy(ListContent.GetChild(i).gameObject);
+
+            var labels = _sceneService.GetAvailableModuleLabels();
+            foreach (var label in labels)
             {
                 var go = Instantiate(AssetControllerPrefab, ListContent);
                 var model = new AssetModel
@@ -188,6 +228,7 @@ namespace Scene
                     Label = label
                 };
                 go.Init(model);
+
                 go.ButtonEnable.ClickAction.AddListener(async () =>
                 {
                     await _sceneService.LoadModuleAsync(label, true);
@@ -201,16 +242,13 @@ namespace Scene
                     model.IsActive = _sceneService.IsLoaded(label);
                     go.SendMessage("SetData", SendMessageOptions.DontRequireReceiver);
                 });
+
                 go.gameObject.SetActive(true);
             }
         }
 
-        private static void SafeRelease<T>(AsyncOperationHandle<T> h)
-        {
-            if (h.IsValid()) Addressables.Release(h);
-        }
 
-        private static void SafeRelease(AsyncOperationHandle h)
+        private static void SafeRelease<T>(AsyncOperationHandle<T> h)
         {
             if (h.IsValid()) Addressables.Release(h);
         }

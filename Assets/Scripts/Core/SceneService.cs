@@ -15,116 +15,96 @@ namespace Core
     [DefaultExecutionOrder(-1000)]
     public class SceneService : MonoBehaviour
     {
-        [Header("Catalog URLs (.bin)")] public string urlQ1_512;
-        public string urlQ2_1024;
-        public string urlQ3_2048;
-
         private string _currentCatalogUrl;
         private IResourceLocator _currentLocator;
         private AsyncOperationHandle<IResourceLocator>? _currentCatalogHandle;
         private readonly Dictionary<Enums.AddressLabel, AsyncOperationHandle<SceneInstance>> _loaded = new();
 
         private bool _opInFlight;
-
-        private void Awake()
-        {
-            DontDestroyOnLoad(gameObject);
-        }
-
+        const string HostBase = "http://127.0.0.1:44563";
+        const string Platform = "StandaloneWindows64";
+        public Enums.SceneVariant CurrentSceneVariant = Enums.SceneVariant.Catalog_A;
+        public Enums.TextureQuality CurrentTextureQuality = Enums.TextureQuality.Texture_1024;
         private void Start()
         {
             ClearAllCaches();
         }
 
-        public async Task EnsureBootstrappedAsync()
+        public string GetCatalogUrl(Enums.SceneVariant variant, Enums.TextureQuality quality)
         {
-            if (_currentLocator != null) return;
-            await SwitchCatalogByQuality(Enums.TextureQuality.Texture_1024, false);
+            var q = quality == Enums.TextureQuality.Texture_512 ? "512" : quality == Enums.TextureQuality.Texture_1024 ? "1024" : "2048";
+            var c = variant == Enums.SceneVariant.Catalog_A ? "A" : "B";
+            return $"{HostBase}/{Platform}/{q}/catalog_{c}_{q}.bin";
+        }
+public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
+{
+    if (_opInFlight) return;
+    if (string.IsNullOrEmpty(catalogUrl)) { Fail("[SceneService] SwitchCatalog: URL empty."); return; }
+    if (_currentLocator != null && _currentCatalogUrl == catalogUrl) return;
+
+    _opInFlight = true;
+    EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
+
+    var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+    var restoreOrder = (preserveOpen && _loaded.Count > 0)
+        ? _loaded.Keys.OrderByDescending(l => l == core).ToList()
+        : new List<Enums.AddressLabel> { core };
+
+    try
+    {
+        ReportDownload(0f);
+        EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.AttemptingToDownloadCatalog);
+
+        var initH = Addressables.InitializeAsync();
+        await initH.Task;
+
+        var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
+        await catH.Task;
+        if (catH.Status != AsyncOperationStatus.Succeeded || catH.Result == null)
+        {
+            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadignCatalogFailed);
+            throw new Exception("Failed to load catalog");
+        }
+        EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadingCatalogSuccessful);
+
+        var newLocator = catH.Result;
+
+        await DownloadManyAndReportAsync(newLocator, restoreOrder);
+
+        if (_loaded.Count > 0)
+        {
+            foreach (var kv in _loaded)
+            {
+                var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
+                await unloadH.Task;
+            }
+            _loaded.Clear();
+            await Resources.UnloadUnusedAssets();
+            GC.Collect();
         }
 
-        public Task SwitchCatalogByQuality(Enums.TextureQuality q, bool preserveOpen = true)
-        {
-            return SwitchCatalog(ResolveCatalogUrl(q), preserveOpen);
-        }
+        if (_currentLocator != null) { Addressables.RemoveResourceLocator(_currentLocator); _currentLocator = null; }
+        if (_currentCatalogHandle.HasValue) { SafeRelease(_currentCatalogHandle.Value); _currentCatalogHandle = null; }
 
-        public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
-        {
-            if (_opInFlight) return;
-            if (string.IsNullOrEmpty(catalogUrl))
-            {
-                Fail("[SceneService] SwitchCatalog: URL empty.");
-                return;
-            }
-            if (_currentLocator != null && _currentCatalogUrl == catalogUrl) return;
-            _opInFlight = true;
-            EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
-            var restoreOrder = preserveOpen ? _loaded.Keys.OrderByDescending(l => l == Enums.AddressLabel.A).ToList() : new List<Enums.AddressLabel>(0);
-            var previous = preserveOpen ? new Dictionary<Enums.AddressLabel, AsyncOperationHandle<SceneInstance>>(_loaded) : null;
-            try
-            {
-                ReportDownload(0f);
-                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.AttemptingToDownloadCatalog);
-                var initH = Addressables.InitializeAsync();
-                await initH.Task;
-                var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
-                await catH.Task;
-                if (catH.Status != AsyncOperationStatus.Succeeded || catH.Result == null)
-                {
-                    EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadignCatalogFailed);
-                    throw new Exception("Failed to load catalog");
-                }
-                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadingCatalogSuccessful);
-                var newLocator = catH.Result;
-                if (restoreOrder.Count > 0)
-                {
-                    await DownloadManyAndReportAsync(newLocator, restoreOrder);
-                    await LoadManyAndReportAsync(newLocator, restoreOrder);
-                }
+        _currentLocator = newLocator;
+        _currentCatalogHandle = catH;
+        _currentCatalogUrl = catalogUrl;
+        await LoadManyAndReportAsync(_currentLocator, restoreOrder);
+        EventManager.CatalogCommittedInvoke();
+        EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
+    }
+    catch (Exception ex)
+    {
+        LoggerExtra.LogError($"[SceneService] SwitchCatalog failed: {ex.Message}");
+        EventManager.LoaderStatusChangedInvoke(IsNet(ex) ? Enums.LoaderStatus.NoInternet : Enums.LoaderStatus.Error);
+    }
+    finally
+    {
+        _opInFlight = false;
+        ReportIdle();
+    }
+}
 
-                if (previous != null && previous.Count > 0)
-                {
-                    foreach (var kv in previous)
-                    {
-                        var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
-                        await unloadH.Task;
-                    }
-                    await Resources.UnloadUnusedAssets();
-                    GC.Collect();
-                }
-
-                if (_currentLocator != null)
-                {
-                    Addressables.RemoveResourceLocator(_currentLocator);
-                    _currentLocator = null;
-                }
-
-                if (_currentCatalogHandle.HasValue)
-                {
-                    SafeRelease(_currentCatalogHandle.Value);
-                    _currentCatalogHandle = null;
-                }
-
-                _currentLocator = newLocator;
-                _currentCatalogHandle = catH;
-                _currentCatalogUrl = catalogUrl;
-                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
-            }
-            catch (Exception ex)
-            {
-                LoggerExtra.LogError($"[SceneService] SwitchCatalog failed: {ex.Message}");
-                EventManager.LoaderStatusChangedInvoke(IsNet(ex) ? Enums.LoaderStatus.NoInternet : Enums.LoaderStatus.Error);
-            }
-            finally
-            {
-                _opInFlight = false;
-                ReportIdle();
-            }
-        }
-
-        public Task LoadCoreAsync(Enums.AddressLabel label = Enums.AddressLabel.A)
-        {
-            return LoadModuleAsync(label, true);
-        }
 
         public Task LoadModuleAsync(Enums.AddressLabel label, bool makeActive = false)
         {
@@ -207,17 +187,6 @@ namespace Core
             return _loaded.Keys.ToList();
         }
 
-        private string ResolveCatalogUrl(Enums.TextureQuality q)
-        {
-            return q switch
-            {
-                Enums.TextureQuality.Texture_512 => urlQ1_512,
-                Enums.TextureQuality.Texture_1024 => urlQ2_1024,
-                Enums.TextureQuality.Texture_2048 => urlQ3_2048,
-                _ => urlQ2_1024
-            };
-        }
-
         private async Task LoadByLabelInternal(Enums.AddressLabel label, bool makeActive)
         {
             if (_opInFlight) return;
@@ -263,6 +232,8 @@ namespace Core
             catch (Exception ex)
             {
                 Fail($"[SceneService] Load '{label}' failed: {ex.Message}");
+                EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadignCatalogFailed);
+
             }
             finally
             {
@@ -278,6 +249,7 @@ namespace Core
             long totalBytes = 0;
             foreach (var label in labels)
             {
+                
                 if (!locator.Locate(label.ToString(), typeof(SceneInstance), out var l) || l == null || l.Count == 0) throw new Exception($"Label '{label}' not found in catalog.");
                 var loc = ChooseSceneLocation(l);
                 locs.Add(loc);
@@ -313,17 +285,16 @@ namespace Core
 
         private async Task LoadManyAndReportAsync(IResourceLocator locator, List<Enums.AddressLabel> labels)
         {
-            var toMakeActiveIndex = labels.FindIndex(l => l == Enums.AddressLabel.A);
-            if (toMakeActiveIndex < 0) toMakeActiveIndex = 0;
             var per = labels.Count > 0 ? 1f / labels.Count : 1f;
             var baseAccum = 0f;
-
+            var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
             for (var i = 0; i < labels.Count; i++)
             {
                 var label = labels[i];
                 if (!locator.Locate(label.ToString(), typeof(SceneInstance), out var l) || l == null || l.Count == 0) throw new Exception($"Label '{label}' not found in catalog.");
                 var sceneLoc = ChooseSceneLocation(l);
                 var loadH = Addressables.LoadSceneAsync(sceneLoc, LoadSceneMode.Additive, true);
+                
                 while (!loadH.IsDone)
                 {
                     ReportLoad(baseAccum + per * loadH.PercentComplete);
@@ -331,7 +302,7 @@ namespace Core
                 }
                 if (loadH.Status != AsyncOperationStatus.Succeeded || !loadH.Result.Scene.isLoaded) throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
                 _loaded[label] = loadH;
-                if (label == Enums.AddressLabel.A) SceneManager.SetActiveScene(loadH.Result.Scene);
+                if (label == core) SceneManager.SetActiveScene(loadH.Result.Scene);
                 baseAccum += per;
                 ReportLoad(baseAccum);
             }
@@ -400,17 +371,43 @@ namespace Core
         private void OnEnable()
         {
             EventManager.OnRequestLoadByQuality += HandleRequestByQuality;
+            EventManager.OnRequestSceneLoad += HandleRequestByScene;
         }
 
         private void OnDisable()
         {
             EventManager.OnRequestLoadByQuality -= HandleRequestByQuality;
+            EventManager.OnRequestSceneLoad -= HandleRequestByScene;
         }
 
-        private async void HandleRequestByQuality(Enums.TextureQuality quality, string _)
+        private async void HandleRequestByQuality(Enums.TextureQuality quality)
         {
-            await SwitchCatalogByQuality(quality, true);
-            if (!IsLoaded(Enums.AddressLabel.A)) await LoadCoreAsync();
+            CurrentTextureQuality = quality;
+            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), true);
         }
+        private async void HandleRequestByScene(Enums.SceneVariant variant)
+        {
+            CurrentSceneVariant = variant;
+            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), false);
+        }
+        public Enums.AddressLabel GetCoreLabel()
+        {
+            return CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
+        }
+
+        public IReadOnlyList<Enums.AddressLabel> GetAvailableModuleLabels()
+        {
+            var result = new List<Enums.AddressLabel>();
+            if (_currentLocator == null) return result;
+
+            foreach (Enums.AddressLabel label in Enum.GetValues(typeof(Enums.AddressLabel)))
+            {
+                if (label == Enums.AddressLabel.A || label == Enums.AddressLabel.B) continue;
+                if (_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) && locs != null && locs.Count > 0)
+                    result.Add(label);
+            }
+            return result;
+        }
+
     }
 }
