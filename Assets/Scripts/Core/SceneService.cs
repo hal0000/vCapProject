@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -9,28 +9,42 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.SceneManagement;
+using Cysharp.Threading.Tasks; // UniTask
 
 namespace Core
 {
     [DefaultExecutionOrder(-1000)]
     public class SceneService : MonoBehaviour
     {
+        private const string HostBase  = "http://127.0.0.1:44563";
+        private const string Platform  = "StandaloneWindows64";
+        private const bool RunGcAfterHeavyOps = true;
+        private const float ProgressThrottleSec = 0.12f;
+        private const long  BytesStepForText   = 1 << 20; //every one mb
         private string _currentCatalogUrl;
         private IResourceLocator _currentLocator;
         private AsyncOperationHandle<IResourceLocator>? _currentCatalogHandle;
-        private readonly Dictionary<Enums.AddressLabel, AsyncOperationHandle<SceneInstance>> _loaded = new();
-
+        private readonly Dictionary<Enums.AddressLabel, AsyncOperationHandle<SceneInstance>> _loaded = new(8);
         private bool _opInFlight;
-        private const string HostBase = "http://127.0.0.1:44563";
-        private const string Platform = "StandaloneWindows64";
-        public Enums.SceneVariant CurrentSceneVariant = Enums.SceneVariant.Catalog_A;
+        private bool _initCalled;
+
+        private CancellationTokenSource _opCts;
+
+        private readonly List<IResourceLocation> _tmpLocs  = new(8);
+        private readonly List<long>              _tmpSizes = new(8);
+        private readonly List<Enums.AddressLabel> _tmpLabels = new(8);
+
+        private float _lastProgTs;
+        private long  _lastBytesShown;
+
+        public Enums.SceneVariant  CurrentSceneVariant  = Enums.SceneVariant.Catalog_A;
         public Enums.TextureQuality CurrentTextureQuality = Enums.TextureQuality.Texture_1024;
-        private bool _initCalled = false;
+
         public string GetCatalogUrl(Enums.SceneVariant variant, Enums.TextureQuality quality)
         {
-            var q = quality == Enums.TextureQuality.Texture_512 ? "512" :
-                quality == Enums.TextureQuality.Texture_1024 ? "1024" : "2048";
-            var c = variant == Enums.SceneVariant.Catalog_A ? "A" : "B";
+            var q = (quality == Enums.TextureQuality.Texture_512) ? "512"
+                  : (quality == Enums.TextureQuality.Texture_1024) ? "1024" : "2048";
+            var c = (variant == Enums.SceneVariant.Catalog_A) ? "A" : "B";
             return $"{HostBase}/{Platform}/{q}/catalog_{c}_{q}.bin";
         }
 
@@ -43,9 +57,7 @@ namespace Core
                 Fail("[SceneService] SwitchCatalog: URL empty.");
                 return;
             }
-
-            if (!string.IsNullOrEmpty(_currentCatalogUrl) &&
-                string.Equals(_currentCatalogUrl, catalogUrl, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(_currentCatalogUrl) && string.Equals(_currentCatalogUrl, catalogUrl, StringComparison.Ordinal))
             {
                 EventManager.NewNotificationInvoke(Enums.Notification.NoChange);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
@@ -53,23 +65,17 @@ namespace Core
             }
 
             _opInFlight = true;
+            var token = BeginOp();
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
-
-            var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B ? Enums.AddressLabel.B : Enums.AddressLabel.A;
-            var restoreOrder = (preserveOpen && _loaded.Count > 0)
-                ? _loaded.Keys.OrderByDescending(l => l == core).ToList()
-                : new List<Enums.AddressLabel> { core };
+            ReportDownloadInternal(0f, null);
 
             try
             {
-                ReportDownload(0f);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.AttemptingToDownloadCatalog);
+                await Addressables.InitializeAsync().ToUniTask(cancellationToken: token);
 
-                var initH = Addressables.InitializeAsync();
-                await initH.Task;
-
-                var catH = Addressables.LoadContentCatalogAsync(catalogUrl, false);
-                await catH.Task;
+                var catH = Addressables.LoadContentCatalogAsync(catalogUrl, autoReleaseHandle: false);
+                await catH.ToUniTask(cancellationToken: token);
                 if (catH.Status != AsyncOperationStatus.Succeeded || catH.Result == null)
                 {
                     EventManager.NewNotificationInvoke(Enums.Notification.CatalogInitFailed);
@@ -81,36 +87,46 @@ namespace Core
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.DownloadingCatalogSuccessful);
 
                 var newLocator = catH.Result;
-
-                await DownloadManyAndReportAsync(newLocator, restoreOrder);
-
-                if (_loaded.Count > 0)
+                _tmpLabels.Clear();
+                var core = GetCoreLabel();
+                _tmpLabels.Add(core);
+                if (preserveOpen && _loaded.Count > 0)
                 {
                     foreach (var kv in _loaded)
                     {
-                        var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
-                        await unloadH.Task;
+                        var label = kv.Key;
+                        if (label != core) _tmpLabels.Add(label);
                     }
-                    _loaded.Clear();
-                    await Resources.UnloadUnusedAssets();
-                    GC.Collect();
                 }
+                var plan = new List<Enums.AddressLabel>(_tmpLabels);
+                await DownloadManyAndReportAsync(newLocator, plan, token);
 
+                if (_loaded.Count > 0)
+                {
+                    await UnloadOpenScenesInternalAsync(token);
+                }
+                // Locator swap
                 if (_currentLocator != null) { Addressables.RemoveResourceLocator(_currentLocator); _currentLocator = null; }
                 if (_currentCatalogHandle.HasValue) { SafeRelease(_currentCatalogHandle.Value); _currentCatalogHandle = null; }
 
-                _currentLocator = newLocator;
+                _currentLocator       = newLocator;
                 _currentCatalogHandle = catH;
-                _currentCatalogUrl = catalogUrl;
+                _currentCatalogUrl    = catalogUrl;
 
-                await LoadManyAndReportAsync(_currentLocator, restoreOrder);
+                await LoadManyAndReportAsync(_currentLocator, plan, token);
 
+                await Resources.UnloadUnusedAssets();
+                if (RunGcAfterHeavyOps) GC.Collect();
                 EventManager.CatalogCommittedInvoke();
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
             }
+            catch (OperationCanceledException)
+            {
+                //nothing
+            }
             catch (Exception ex)
             {
-                bool isNet = IsNet(ex);
+                var isNet = IsNet(ex);
                 EventManager.NewNotificationInvoke(isNet ? Enums.Notification.NoInternet : Enums.Notification.CatalogSwitchFailed);
                 LoggerExtra.LogError($"[SceneService] SwitchCatalog failed: {ex.Message}");
                 EventManager.LoaderStatusChangedInvoke(isNet ? Enums.LoaderStatus.NoInternet : Enums.LoaderStatus.Error);
@@ -121,12 +137,7 @@ namespace Core
                 ReportIdle();
             }
         }
-
-
-        public Task LoadModuleAsync(Enums.AddressLabel label, bool makeActive = false)
-        {
-            return LoadByLabelInternal(label, makeActive);
-        }
+        public Task LoadModuleAsync(Enums.AddressLabel label, bool makeActive = false) => LoadByLabelInternal(label, makeActive);
 
         public async Task UnloadModuleAsync(Enums.AddressLabel label)
         {
@@ -136,21 +147,18 @@ namespace Core
                 EventManager.NewNotificationInvoke(Enums.Notification.ModuleNotLoaded);
                 return;
             }
-
             _opInFlight = true;
+            var token = BeginOp();
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             try
             {
                 var unloadH = Addressables.UnloadSceneAsync(h, true);
-                await unloadH.Task;
-
+                await unloadH.ToUniTask(cancellationToken: token);
                 _loaded.Remove(label);
-                await Resources.UnloadUnusedAssets();
-                GC.Collect();
-
                 EventManager.NewNotificationInvoke(Enums.Notification.ModuleUnloaded);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 EventManager.NewNotificationInvoke(Enums.Notification.SceneUnloadFailed);
@@ -162,41 +170,28 @@ namespace Core
                 ReportIdle();
             }
         }
-        
+
         public async Task UnloadAllAsync()
         {
             if (_opInFlight) return;
             _opInFlight = true;
+            var token = BeginOp();
             try
             {
-                await UnloadOpenScenesInternalAsync();
+                await UnloadOpenScenesInternalAsync(token);
             }
             finally
             {
                 _opInFlight = false;
+                ReportIdle();
             }
-        }
-
-        private async Task UnloadOpenScenesInternalAsync()
-        {
-            if (_loaded.Count == 0) return;
-
-            foreach (var kv in _loaded)
-            {
-                var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
-                await unloadH.Task;
-            }
-
-            _loaded.Clear();
-            await Resources.UnloadUnusedAssets();
-            GC.Collect();
         }
 
         public bool ClearAllCaches()
         {
             var ok = Caching.ClearCache();
             if (!ok) EventManager.NewNotificationInvoke(Enums.Notification.CacheClearFailed);
-            LoggerExtra.Log($"[SceneService] Caching.ClearCache() => {ok}");
+
             if (_currentLocator != null)
             {
                 Addressables.RemoveResourceLocator(_currentLocator);
@@ -213,16 +208,14 @@ namespace Core
             return ok;
         }
 
-        public bool IsLoaded(Enums.AddressLabel label)
-        {
-            return _loaded.ContainsKey(label);
-        }
+        public bool IsLoaded(Enums.AddressLabel label) => _loaded.ContainsKey(label);
 
         public IReadOnlyList<Enums.AddressLabel> GetOpenLabels()
         {
-            return _loaded.Keys.ToList();
+            _tmpLabels.Clear();
+            foreach (var kv in _loaded) _tmpLabels.Add(kv.Key);
+            return _tmpLabels;
         }
-
         private async Task LoadByLabelInternal(Enums.AddressLabel label, bool makeActive)
         {
             if (_opInFlight) { EventManager.NewNotificationInvoke(Enums.Notification.Busy); return; }
@@ -233,36 +226,44 @@ namespace Core
                 LoggerExtra.LogWarning("[SceneService] No catalog loaded.");
                 return;
             }
-
             if (_loaded.ContainsKey(label))
             {
                 EventManager.NewNotificationInvoke(Enums.Notification.ModuleAlreadyLoaded);
                 return;
             }
-
             _opInFlight = true;
+            var token = BeginOp();
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
+
             try
             {
-                if (!_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) || locs == null || locs.Count == 0)
+                if (!_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) ||
+                    locs == null || locs.Count == 0)
                 {
                     EventManager.NewNotificationInvoke(Enums.Notification.LabelNotFound);
                     throw new Exception($"Label '{label}' not found in catalog.");
                 }
 
                 var sceneLoc = ChooseSceneLocation(locs);
-                var bytes = await GetSizeAsync(sceneLoc);
+                var bytes    = await GetSizeAsync(sceneLoc, token);
 
                 if (bytes > 0)
                 {
-                    var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { sceneLoc }, false);
-                    EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Downloading);
+                    long total = bytes;
+                    long shown = 0;
+                    _lastBytesShown = 0;
 
-                    while (!dl.IsDone)
-                    {
-                        ReportDownload(dl.PercentComplete, $"{FormatBytes((long)(bytes * dl.PercentComplete))} / {FormatBytes(bytes)}");
-                        await Task.Yield();
-                    }
+                    var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { sceneLoc }, false);
+
+                    await dl.ToUniTask(
+                        progress: Progress.Create<float>(p =>
+                        {
+                            ThrottledReportDownload(p);
+                            var done = (long)(total * p);
+                            ThrottledBytes(done, total);
+                        }),
+                        cancellationToken: token
+                    );
 
                     if (dl.Status != AsyncOperationStatus.Succeeded)
                     {
@@ -274,32 +275,24 @@ namespace Core
                 }
                 else
                 {
-                    ReportDownload(1f, "0 B / 0 B");
+                    ReportDownloadInternal(1f, "0 B / 0 B");
                 }
-
-                var loadH = Addressables.LoadSceneAsync(sceneLoc, LoadSceneMode.Additive, true);
-                while (!loadH.IsDone)
-                {
-                    ReportLoad(loadH.PercentComplete);
-                    await Task.Yield();
-                }
-
-                if (loadH.Status != AsyncOperationStatus.Succeeded || !loadH.Result.Scene.isLoaded)
-                {
-                    EventManager.NewNotificationInvoke(Enums.Notification.SceneLoadFailed);
-                    throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
-                }
-
+                var loadH = Addressables.LoadSceneAsync(sceneLoc, LoadSceneMode.Additive, activateOnLoad: false);
+                await loadH.ToUniTask(progress: Progress.Create<float>(ThrottledReportLoad), cancellationToken: token);
+                if (loadH.Status != AsyncOperationStatus.Succeeded) throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
+                var inst = loadH.Result;
+                await inst.ActivateAsync().ToUniTask(cancellationToken: token);
+                await UniTask.NextFrame(PlayerLoopTiming.LastPostLateUpdate, token);
+                if (!inst.Scene.isLoaded) throw new Exception("Scene activated but not reported as loaded");
                 _loaded[label] = loadH;
-                if (makeActive) SceneManager.SetActiveScene(loadH.Result.Scene);
-
-                ReportLoad(1f);
-                await Resources.UnloadUnusedAssets();
-                GC.Collect();
-
+                if (makeActive)
+                {
+                    if (!SceneManager.SetActiveScene(inst.Scene)) LoggerExtra.LogWarning($"[SceneService] SetActiveScene failed for {label}");
+                }
                 EventManager.NewNotificationInvoke(Enums.Notification.ModuleLoaded);
                 EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Completed);
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 EventManager.NewNotificationInvoke(IsNet(ex) ? Enums.Notification.NoInternet : Enums.Notification.SceneLoadFailed);
@@ -312,16 +305,33 @@ namespace Core
             }
         }
 
-
-        private async Task DownloadManyAndReportAsync(IResourceLocator locator, List<Enums.AddressLabel> labels)
+        private async Task UnloadOpenScenesInternalAsync(CancellationToken token)
         {
-            var core = GetCoreLabel();
-            var locs = new List<IResourceLocation>(labels.Count);
-            var sizes = new List<long>(labels.Count);
-            long totalBytes = 0;
+            if (_loaded.Count == 0) return;
 
-            foreach (var label in labels)
+            foreach (var kv in _loaded)
             {
+                var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
+                await unloadH.ToUniTask(cancellationToken: token);
+            }
+
+            _loaded.Clear();
+            await Resources.UnloadUnusedAssets();
+            if (RunGcAfterHeavyOps) GC.Collect();
+        }
+
+        private async Task DownloadManyAndReportAsync(IResourceLocator locator, IReadOnlyList<Enums.AddressLabel> labels, CancellationToken token)
+        {
+            _tmpLocs.Clear();
+            _tmpSizes.Clear();
+
+            // locate + size
+            long totalBytes = 0;
+            var core = GetCoreLabel();
+
+            for (int i = 0; i < labels.Count; i++)
+            {
+                var label = labels[i];
                 if (!locator.Locate(label.ToString(), typeof(SceneInstance), out var l) || l == null || l.Count == 0)
                 {
                     if (label == core) throw new Exception($"Core label '{label}' not found in catalog.");
@@ -330,120 +340,123 @@ namespace Core
                 }
 
                 var loc = ChooseSceneLocation(l);
-                locs.Add(loc);
-                var s = await GetSizeAsync(loc);
-                sizes.Add(s);
+                _tmpLocs.Add(loc);
+
+                var s = await GetSizeAsync(loc, token);
+                _tmpSizes.Add(s);
                 totalBytes += s;
             }
 
             long accumulatedBytes = 0;
-            var accumulated = 0f;
-            for (var i = 0; i < locs.Count; i++)
+            float accumulated = 0f;
+            _lastBytesShown = 0;
+
+            for (int i = 0; i < _tmpLocs.Count; i++)
             {
-                var bytes = sizes[i];
+                var loc   = _tmpLocs[i];
+                var bytes = _tmpSizes[i];
+
                 if (bytes <= 0)
                 {
-                    var msg0 = totalBytes > 0 ? $"{FormatBytes(accumulatedBytes)} / {FormatBytes(totalBytes)}" : null;
-                    if (totalBytes > 0) accumulated += (float)bytes / totalBytes;
-                    ReportDownload(accumulated, msg0);
+                    if (totalBytes > 0) accumulated += 0f;
+                    ReportDownloadInternal(accumulated, totalBytes > 0 ? $"{FormatBytes(accumulatedBytes)} / {FormatBytes(totalBytes)}" : null);
                     continue;
                 }
-
-                var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { locs[i] }, false);
-                while (!dl.IsDone)
-                {
-                    var local = dl.PercentComplete;
-                    var weighted = totalBytes > 0
-                        ? (float)bytes / totalBytes * local
-                        : 1f / Math.Max(1, locs.Count) * local;
-                    var overall = accumulated + weighted;
-                    var done = accumulatedBytes + (long)(bytes * local);
-                    var msg = totalBytes > 0 ? $"{FormatBytes(done)} / {FormatBytes(totalBytes)}" : null;
-                    ReportDownload(overall, msg);
-                    await Task.Yield();
-                }
-
-                if (dl.Status != AsyncOperationStatus.Succeeded)
-                    throw new Exception("Failed to download dependencies.");
+                var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { loc }, false);
+                await dl.ToUniTask(
+                    progress: Progress.Create<float>(p =>
+                    { float weighted = (totalBytes > 0)
+                            ? ((float)bytes / totalBytes) * p
+                            : (1f / Math.Max(1, _tmpLocs.Count)) * p;
+                        float overall = accumulated + weighted;
+                        ThrottledReportDownload(overall);
+                        var done = accumulatedBytes + (long)(bytes * p);
+                        ThrottledBytes(done, totalBytes);
+                    }),
+                    cancellationToken: token
+                );
+                if (dl.Status != AsyncOperationStatus.Succeeded) throw new Exception("Failed to download dependencies.");
                 Addressables.Release(dl);
-
                 accumulatedBytes += bytes;
-                accumulated += totalBytes > 0 ? (float)bytes / totalBytes : 1f / Math.Max(1, locs.Count);
-
-                var msgAfter = totalBytes > 0 ? $"{FormatBytes(accumulatedBytes)} / {FormatBytes(totalBytes)}" : null;
-                ReportDownload(accumulated, msgAfter);
+                accumulated += (totalBytes > 0) ? ((float)bytes / totalBytes) : (1f / Math.Max(1, _tmpLocs.Count));
+                ReportDownloadInternal(accumulated, totalBytes > 0 ? $"{FormatBytes(accumulatedBytes)} / {FormatBytes(totalBytes)}" : null);
+            }
+            ReportDownloadInternal(1f, totalBytes > 0 ? $"{FormatBytes(totalBytes)} / {FormatBytes(totalBytes)}" : null);
+        }
+        private async Task LoadManyAndReportAsync(IResourceLocator locator, IReadOnlyList<Enums.AddressLabel> labels, CancellationToken token)
+        {
+            _tmpLabels.Clear();
+            var core = GetCoreLabel();
+            var present = new List<Enums.AddressLabel>(labels.Count);
+            for (int i = 0; i < labels.Count; i++)
+            {
+                var label = labels[i];
+                if (locator.Locate(label.ToString(), typeof(SceneInstance), out var l) && l != null && l.Count > 0)
+                {
+                    present.Add(label);
+                }
+                else if (label == core)
+                {
+                    throw new Exception($"Core label '{label}' not found in catalog.");
+                }
+                else
+                {
+                    LoggerExtra.LogWarning($"[SceneService] Optional label '{label}' not found. Skipping.");
+                }
             }
 
-            var msgDone = totalBytes > 0 ? $"{FormatBytes(totalBytes)} / {FormatBytes(totalBytes)}" : null;
-            ReportDownload(1f, msgDone);
-        }
-
-        private async Task LoadManyAndReportAsync(IResourceLocator locator, List<Enums.AddressLabel> labels)
-        {
-            var core = CurrentSceneVariant == Enums.SceneVariant.Catalog_B
-                ? Enums.AddressLabel.B
-                : Enums.AddressLabel.A;
-
-            var present = new List<Enums.AddressLabel>();
-            foreach (var label in labels)
-                if (locator.Locate(label.ToString(), typeof(SceneInstance), out var l) && l != null && l.Count > 0)
-                    present.Add(label);
-                else if (label == core)
-                    throw new Exception($"Core label '{label}' not found in catalog.");
-                else
-                    LoggerExtra.LogWarning($"[SceneService] Optional label '{label}' not found. Skipping.");
-
-            var per = present.Count > 0 ? 1f / present.Count : 1f;
-            var baseAccum = 0f;
-
-            for (var i = 0; i < present.Count; i++)
+            float per = (present.Count > 0) ? (1f / present.Count) : 1f;
+            float baseAccum = 0f;
+            for (int i = 0; i < present.Count; i++)
             {
                 var label = present[i];
                 locator.Locate(label.ToString(), typeof(SceneInstance), out var l);
                 var sceneLoc = ChooseSceneLocation(l);
-                var loadH = Addressables.LoadSceneAsync(sceneLoc, LoadSceneMode.Additive, true);
 
-                while (!loadH.IsDone)
-                {
-                    ReportLoad(baseAccum + per * loadH.PercentComplete);
-                    await Task.Yield();
-                }
+                var loadH = Addressables.LoadSceneAsync(sceneLoc, LoadSceneMode.Additive, activateOnLoad: false);
+                await loadH.ToUniTask(
+                    progress: Progress.Create<float>(p => ThrottledReportLoad(baseAccum + per * p)),
+                    cancellationToken: token);
+                if (loadH.Status != AsyncOperationStatus.Succeeded) throw new Exception(loadH.OperationException != null ? loadH.OperationException.Message : "Failed to load scene");
+                var inst = loadH.Result;
+                await inst.ActivateAsync().ToUniTask(cancellationToken: token);
+                await UniTask.NextFrame(PlayerLoopTiming.LastPostLateUpdate, token);
 
-                if (loadH.Status != AsyncOperationStatus.Succeeded || !loadH.Result.Scene.isLoaded)
-                    throw new Exception(loadH.OperationException != null
-                        ? loadH.OperationException.Message
-                        : "Failed to load scene");
+                if (!inst.Scene.isLoaded)
+                    throw new Exception("Scene activated but not reported as loaded");
                 _loaded[label] = loadH;
-                if (label == core) SceneManager.SetActiveScene(loadH.Result.Scene);
+                if (label == core) SceneManager.SetActiveScene(inst.Scene);
                 baseAccum += per;
-                ReportLoad(baseAccum);
+                ThrottledReportLoad(baseAccum);
             }
-
-            ReportLoad(1f);
+            ThrottledReportLoad(1f);
         }
 
-        private static async Task<long> GetSizeAsync(IResourceLocation loc)
+
+        private async UniTask<long> GetSizeAsync(IResourceLocation loc, CancellationToken token)
         {
             var sizeH = Addressables.GetDownloadSizeAsync(loc);
-            await sizeH.Task;
-            var bytes = sizeH.Status == AsyncOperationStatus.Succeeded ? sizeH.Result : 0;
+            await sizeH.ToUniTask(cancellationToken: token);
+            var bytes = (sizeH.Status == AsyncOperationStatus.Succeeded) ? sizeH.Result : 0;
             if (sizeH.IsValid()) Addressables.Release(sizeH);
             return bytes;
         }
 
         private static IResourceLocation ChooseSceneLocation(IList<IResourceLocation> locs)
         {
+            if (locs == null || locs.Count == 0) return null;
             if (locs.Count == 1) return locs[0];
-            var best = locs[0];
-            var bestKey = best.PrimaryKey ?? string.Empty;
-            for (var i = 1; i < locs.Count; i++)
+            IResourceLocation best = locs[0];
+            string bestKey = best.PrimaryKey ?? string.Empty;
+            for (int i = 1; i < locs.Count; i++)
             {
                 var k = locs[i].PrimaryKey ?? string.Empty;
-                if (string.CompareOrdinal(k, bestKey) >= 0) continue;
-                best = locs[i];
-                bestKey = k;
+                if (string.CompareOrdinal(k, bestKey) < 0)
+                {
+                    best = locs[i];
+                    bestKey = k;
+                }
             }
-
             return best;
         }
 
@@ -457,7 +470,7 @@ namespace Core
             var m = ex.Message.ToLowerInvariant();
             return m.Contains("connect") || m.Contains("resolve") || m.Contains("timed out");
         }
-
+        
         private void Fail(string msg)
         {
             LoggerExtra.LogError(msg);
@@ -465,34 +478,59 @@ namespace Core
             ReportIdle();
         }
 
-        private void ReportDownload(float normalized01, string message = null)
-        {
-            var p = Mathf.Clamp01(normalized01) * 0.5f;
-            EventManager.LoadProgressInvoke(Enums.LoaderPhase.DownloadingDependencies, p, message);
-        }
-
-        private void ReportLoad(float normalized01)
-        {
-            var p = 0.5f + Mathf.Clamp01(normalized01) * 0.5f;
-            EventManager.LoadProgressInvoke(Enums.LoaderPhase.SceneLoading, p);
-        }
-
         private void ReportIdle()
         {
             EventManager.LoadProgressInvoke(Enums.LoaderPhase.Idle, 1f);
         }
 
+        private void ThrottledReportDownload(float overall01)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - _lastProgTs < ProgressThrottleSec) return;
+            _lastProgTs = now;
+            ReportDownloadInternal(overall01, null);
+        }
+
+        private void ThrottledReportLoad(float overall01)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - _lastProgTs < ProgressThrottleSec) return;
+            _lastProgTs = now;
+            var p = 0.5f + Mathf.Clamp01(overall01) * 0.5f;
+            EventManager.LoadProgressInvoke(Enums.LoaderPhase.SceneLoading, p);
+        }
+
+        private void ThrottledBytes(long done, long total)
+        {
+            float now = Time.realtimeSinceStartup;
+            if ((done - _lastBytesShown) < BytesStepForText && (now - _lastProgTs) < ProgressThrottleSec) return;
+            _lastBytesShown = done;
+            ReportDownloadInternal(null, $"{FormatBytes(done)} / {FormatBytes(total)}");
+        }
+        private void ReportDownloadInternal(float? normalized01, string message)
+        {
+            float p = normalized01.HasValue ? (Mathf.Clamp01(normalized01.Value) * 0.5f) : -1f;
+            EventManager.LoadProgressInvoke(Enums.LoaderPhase.DownloadingDependencies, p, message);
+        }
+
+        #region Events
+
         private void OnEnable()
         {
             EventManager.OnRequestLoadByQuality += HandleRequestByQuality;
-            EventManager.OnRequestSceneLoad += HandleRequestByScene;
+            EventManager.OnRequestSceneLoad    += HandleRequestByScene;
         }
 
         private void OnDisable()
         {
             EventManager.OnRequestLoadByQuality -= HandleRequestByQuality;
-            EventManager.OnRequestSceneLoad -= HandleRequestByScene;
+            EventManager.OnRequestSceneLoad     -= HandleRequestByScene;
+
+            _opCts?.Cancel();
+            _opCts?.Dispose();
+            _opCts = null;
         }
+        #endregion
 
         private async void HandleRequestByQuality(Enums.TextureQuality quality)
         {
@@ -502,7 +540,7 @@ namespace Core
                 return;
             }
             CurrentTextureQuality = quality;
-            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), true);
+            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), preserveOpen: true);
         }
 
         private async void HandleRequestByScene(Enums.SceneVariant variant)
@@ -514,7 +552,7 @@ namespace Core
             }
             _initCalled = true;
             CurrentSceneVariant = variant;
-            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), false);
+            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), preserveOpen: false);
         }
 
         public Enums.AddressLabel GetCoreLabel()
@@ -524,18 +562,25 @@ namespace Core
 
         public IReadOnlyList<Enums.AddressLabel> GetAvailableModuleLabels()
         {
-            var result = new List<Enums.AddressLabel>();
-            if (_currentLocator == null) return result;
-
+            _tmpLabels.Clear();
+            if (_currentLocator == null) return _tmpLabels;
             foreach (Enums.AddressLabel label in Enum.GetValues(typeof(Enums.AddressLabel)))
             {
                 if (label == Enums.AddressLabel.A || label == Enums.AddressLabel.B) continue;
-                if (_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) && locs != null &&
-                    locs.Count > 0)
-                    result.Add(label);
+                if (_currentLocator.Locate(label.ToString(), typeof(SceneInstance), out var locs) && locs != null && locs.Count > 0)
+                    _tmpLabels.Add(label);
             }
+            return _tmpLabels;
+        }
 
-            return result;
+        private CancellationToken BeginOp()
+        {
+            _opCts?.Cancel();
+            _opCts?.Dispose();
+            _opCts = new CancellationTokenSource();
+            _lastProgTs = 0f;
+            _lastBytesShown = 0;
+            return _opCts.Token;
         }
 
         private static string FormatBytes(long bytes)
