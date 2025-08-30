@@ -36,7 +36,7 @@ namespace UI
 
         private void Start()
         {
-            _originalScale = transform.localScale;
+            _originalScale = !IsVisible ? Vector3.one : transform.localScale;
             if (ButtonDisabled)
                 Disabled?.Invoke(null);
         }
