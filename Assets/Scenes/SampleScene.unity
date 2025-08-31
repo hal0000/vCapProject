@@ -715,8 +715,6 @@ MonoBehaviour:
           m_BoolArgument: 0
         m_CallState: 2
   IsVisible: 0
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
   _title: {fileID: 1182947866}
 --- !u!1001 &96289807
 PrefabInstance:
@@ -893,8 +891,6 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   IsVisible: 0
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
   ButtonEnable: {fileID: 1135754542}
   ButtonDisable: {fileID: 2136664467}
   Name: {fileID: 1438916672}
@@ -1853,8 +1849,6 @@ MonoBehaviour:
           m_BoolArgument: 0
         m_CallState: 2
   IsVisible: 0
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
   _backgroundRect: {fileID: 570143580}
   _notificationText: {fileID: 2069522520}
   _horizontalPadding: 20
@@ -1939,8 +1933,6 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   IsVisible: 0
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
 --- !u!1001 &632995408
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3114,8 +3106,6 @@ MonoBehaviour:
           m_BoolArgument: 0
         m_CallState: 2
   IsVisible: 0
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
   ProgressFill: {fileID: 1082784465}
   StatusText: {fileID: 801595355}
   progressSmoothTime: 0.15
@@ -3700,8 +3690,6 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   IsVisible: 1
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
   ButtonDisabled: 0
   ContainsIdleEffect: 0
   NoAnim: 0
@@ -4848,6 +4836,34 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[1].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: UnityEngine.Object, UnityEngine
+      objectReference: {fileID: 0}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_Target
+      value: 
+      objectReference: {fileID: 519786212}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_MethodName
+      value: Show
+      objectReference: {fileID: 0}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_TargetAssemblyTypeName
+      value: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_Arguments.m_ObjectArgumentAssemblyTypeName
       value: UnityEngine.Object, UnityEngine
       objectReference: {fileID: 0}
     - target: {fileID: 4187696680833017462, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
@@ -7253,8 +7269,6 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   IsVisible: 1
-  EnableThemeSwitch: 0
-  ThemeLerp: 0.1
   ButtonDisabled: 0
   ContainsIdleEffect: 0
   NoAnim: 0
@@ -7582,7 +7596,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8.5, y: 1032254.7}
+  m_AnchoredPosition: {x: 8.5, y: 1048801.6}
   m_SizeDelta: {x: 0, y: 350}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &2391248396655094563
