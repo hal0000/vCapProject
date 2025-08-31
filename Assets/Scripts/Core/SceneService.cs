@@ -16,8 +16,6 @@ namespace Core
     [DefaultExecutionOrder(-1000)]
     public class SceneService : MonoBehaviour
     {
-        private const string HostBase  = "http://127.0.0.1:44563";
-        private const string Platform  = "StandaloneWindows64";
         private const bool RunGcAfterHeavyOps = true;
         private const float ProgressThrottleSec = 0.12f;
         private const long  BytesStepForText   = 1 << 20; //every one mb
@@ -40,12 +38,21 @@ namespace Core
         public Enums.SceneVariant  CurrentSceneVariant  = Enums.SceneVariant.Catalog_A;
         public Enums.TextureQuality CurrentTextureQuality = Enums.TextureQuality.Texture_1024;
 
+        private const string GH_REPO = "hal0000/vCapProject";
+        private static string SizeStr(Enums.TextureQuality q) => q == Enums.TextureQuality.Texture_512  ? "512" : q == Enums.TextureQuality.Texture_1024 ? "1024" : "2048";
+        private static string CoreStr(Enums.SceneVariant v) => v == Enums.SceneVariant.Catalog_A ? "A" : "B";
+
+        private static string TagFor(Enums.SceneVariant v, Enums.TextureQuality q)
+            => $"{CoreStr(v)}_{SizeStr(q)}";
+
+        private static string GithubReleaseBase(Enums.SceneVariant v, Enums.TextureQuality q)
+            => $"https://github.com/{GH_REPO}/releases/download/{TagFor(v, q)}";
+
         public string GetCatalogUrl(Enums.SceneVariant variant, Enums.TextureQuality quality)
         {
-            var q = (quality == Enums.TextureQuality.Texture_512) ? "512"
-                  : (quality == Enums.TextureQuality.Texture_1024) ? "1024" : "2048";
-            var c = (variant == Enums.SceneVariant.Catalog_A) ? "A" : "B";
-            return $"{HostBase}/{Platform}/{q}/catalog_{c}_{q}.bin";
+            var c = CoreStr(variant);
+            var qStr = SizeStr(quality);
+            return $"{GithubReleaseBase(variant, quality)}/catalog_{c}_{qStr}.bin";
         }
 
         public async Task SwitchCatalog(string catalogUrl, bool preserveOpen = true)
