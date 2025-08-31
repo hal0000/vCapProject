@@ -1,4 +1,5 @@
 using System;
+using vCapProject.ScriptableObject;
 
 namespace vCapProject.Core
 {

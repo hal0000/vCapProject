@@ -82,5 +82,10 @@
             Texture_1024 = 1,
             Texture_2048 = 2
         }
+        public enum ThemeSlot 
+        {
+            Text,
+            UI,
+        }
     }
 }

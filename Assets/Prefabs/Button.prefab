@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 7881844945661582116}
   - component: {fileID: 1974581227433514932}
   - component: {fileID: 4852342595769867348}
+  - component: {fileID: 3208046937583930895}
   m_Layer: 5
   m_Name: Text
   m_TagString: Untagged
@@ -136,6 +137,22 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &3208046937583930895
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1481114235858371248}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0e6411beca644eeb92096996156d4ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Slot: 0
+  TargetGraphic: {fileID: 4852342595769867348}
+  PreserveAlpha: 1
+  TweenDuration: 0.12
 --- !u!1 &4454016412456997935
 GameObject:
   m_ObjectHideFlags: 0
@@ -149,6 +166,7 @@ GameObject:
   - component: {fileID: 5992375747877282268}
   - component: {fileID: 7176214618239080541}
   - component: {fileID: 731673729184581432}
+  - component: {fileID: 2842149622513280731}
   m_Layer: 5
   m_Name: Button
   m_TagString: Untagged
@@ -392,6 +410,8 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   IsVisible: 0
+  EnableThemeSwitch: 0
+  ThemeLerp: 0.1
   ButtonDisabled: 0
   ContainsIdleEffect: 0
   NoAnim: 0
@@ -417,3 +437,19 @@ MonoBehaviour:
   Enabled:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &2842149622513280731
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4454016412456997935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0e6411beca644eeb92096996156d4ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Slot: 1
+  TargetGraphic: {fileID: 5992375747877282268}
+  PreserveAlpha: 1
+  TweenDuration: 0.12

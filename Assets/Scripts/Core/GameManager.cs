@@ -14,7 +14,6 @@ namespace vCapProject.Core
     {
         public BaseScene CurrentScene;
         public SceneService SceneService;
-
         /// <summary>
         ///     Singleton instance of the GameManager for global access.
         /// </summary>
@@ -22,7 +21,6 @@ namespace vCapProject.Core
 
         private void Awake()
         {
-            Application.targetFrameRate = 120;
             if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);

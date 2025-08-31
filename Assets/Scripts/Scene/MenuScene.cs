@@ -10,6 +10,7 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.ResourceManagement.ResourceProviders;
 using vCapProject.Core;
 using vCapProject.Model;
+using vCapProject.ScriptableObject;
 using vCapProject.UI;
 
 namespace vCapProject.Scene
@@ -22,13 +23,18 @@ namespace vCapProject.Scene
         public AssetController AssetControllerPrefab;
         private bool _requestInFlight;
         private SceneService _sceneService;
-
+        public ThemeManager ThemeManager;
+        public ThemeSwitch LightTheme;
+        public ThemeSwitch DarkTheme;
+        private bool _isLightTheme;
         public override void Awake()
         {
             base.Awake();
             _gm.CurrentScene = this;
             _sceneService = _gm.SceneService;
             EventManager.OnCatalogCommitted += RebuildSceneAssetControllers;
+            ThemeManager = new ThemeManager(LightTheme);
+            _isLightTheme = true;
         }
 
         public override void Start()
@@ -43,6 +49,11 @@ namespace vCapProject.Scene
             EventManager.OnCatalogCommitted -= RebuildSceneAssetControllers;
         }
 
+        public void ChangeTheme()
+        {
+            ThemeManager.ApplyTheme(_isLightTheme ? DarkTheme : LightTheme);
+            _isLightTheme = !_isLightTheme;
+        }
         public void ChangeQuality(int index)
         {
             ChangeTextureQualityAsync((Enums.TextureQuality)index, this.GetCancellationTokenOnDestroy()).Forget();
