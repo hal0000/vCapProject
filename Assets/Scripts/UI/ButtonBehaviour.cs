@@ -24,7 +24,7 @@ namespace vCapProject.UI
         private readonly float _scaleUpSize= 1.15f;
 
         private Vector3 _originalScale;
-        private Tween_scaleTween;
+        private Tween _scaleTween;
         private UIEffect _uiEffect;
 
         private bool _interactable = true;
