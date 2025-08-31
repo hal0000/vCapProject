@@ -2,26 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using Core;
-using Model;
-using UI;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.ResourceManagement.ResourceProviders;
-using Cysharp.Threading.Tasks;
+using vCapProject.Core;
+using vCapProject.Model;
+using vCapProject.UI;
 
-namespace Scene
+namespace vCapProject.Scene
 {
     public class MenuScene : BaseScene
     {
         private const long SafetyMarginBytes = 200L * 1024L * 1024L; // 200 MB
-        private bool _requestInFlight;
-        private SceneService _sceneService;
 
         public Transform ListContent;
         public AssetController AssetControllerPrefab;
+        private bool _requestInFlight;
+        private SceneService _sceneService;
 
         public override void Awake()
         {
@@ -31,16 +31,16 @@ namespace Scene
             EventManager.OnCatalogCommitted += RebuildSceneAssetControllers;
         }
 
-        public override void OnDestroy()
-        {
-            base.OnDestroy();
-            EventManager.OnCatalogCommitted -= RebuildSceneAssetControllers;
-        }
-
         public override void Start()
         {
             base.Start();
             RebuildSceneAssetControllers();
+        }
+
+        public override void OnDestroy()
+        {
+            base.OnDestroy();
+            EventManager.OnCatalogCommitted -= RebuildSceneAssetControllers;
         }
 
         public void ChangeQuality(int index)
@@ -157,7 +157,7 @@ namespace Scene
                     token.ThrowIfCancellationRequested();
                     var label = labels[i];
                     if (_sceneService.IsLoaded(label)) continue;
-                    await _sceneService.LoadModuleAsync(label, false);
+                    await _sceneService.LoadModuleAsync(label);
                     await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate, token);
                 }
 
@@ -227,8 +227,7 @@ namespace Scene
                 var model = new AssetModel
                 {
                     Name = label.ToString(),
-                    IsActive = _sceneService.IsLoaded(label),
-                    Label = label
+                    IsActive = _sceneService.IsLoaded(label)
                 };
                 go.Init(model);
                 go.ButtonEnable.ClickAction.AddListener(async () =>

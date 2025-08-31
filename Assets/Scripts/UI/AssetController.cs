@@ -1,7 +1,7 @@
-﻿using Model;
-using TMPro;
+﻿using TMPro;
+using vCapProject.Model;
 
-namespace UI
+namespace vCapProject.UI
 {
     public class AssetController : UIElement
     {

@@ -1,15 +1,15 @@
-﻿using Core;
-using Scene;
-using TMPro;
+﻿using TMPro;
 using UnityEngine;
+using vCapProject.Core;
+using vCapProject.Scene;
 
-namespace UI
+namespace vCapProject.UI
 {
     public class QuestionPanel : UIElement
     {
         [SerializeField] private TextMeshProUGUI _title;
-        private int _sceneIndex;
         private MenuScene _scene;
+        private int _sceneIndex;
 
         public override void Awake()
         {

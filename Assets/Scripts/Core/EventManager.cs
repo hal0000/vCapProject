@@ -1,12 +1,18 @@
 using System;
 
-namespace Core
+namespace vCapProject.Core
 {
     /// <summary>
     ///     Minimal event hub for the event flow.
     /// </summary>
     public static class EventManager
     {
+        public delegate void LoadProgress(Enums.LoaderPhase phase, float progress01);
+
+        public delegate void RequestLoadByQuality(Enums.TextureQuality quality);
+
+        public delegate void RequestSceneLoad(Enums.SceneVariant variant);
+
         public static event Action<Enums.Notification> OnNewNotification;
 
         public static void NewNotificationInvoke(Enums.Notification n)
@@ -29,16 +35,12 @@ namespace Core
             OnLoadProgressDetailed?.Invoke(phase, p, msg);
         }
 
-        public delegate void RequestLoadByQuality(Enums.TextureQuality quality);
-
         public static event RequestLoadByQuality OnRequestLoadByQuality;
 
         public static void RequestLoadByQualityInvoke(Enums.TextureQuality quality)
         {
             OnRequestLoadByQuality?.Invoke(quality);
         }
-
-        public delegate void RequestSceneLoad(Enums.SceneVariant variant);
 
         public static event RequestSceneLoad OnRequestSceneLoad;
 
@@ -53,8 +55,6 @@ namespace Core
         {
             OnCatalogCommitted?.Invoke();
         }
-
-        public delegate void LoadProgress(Enums.LoaderPhase phase, float progress01);
 
         public static event Action<Enums.LoaderStatus> OnLoaderStatusChanged;
 

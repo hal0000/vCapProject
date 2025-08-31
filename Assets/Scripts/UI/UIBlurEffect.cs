@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace UI
+namespace vCapProject.UI
 {
     public class UIBlurEffect : MonoBehaviour
     {

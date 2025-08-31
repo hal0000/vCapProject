@@ -1,18 +1,15 @@
-﻿namespace Core
+﻿namespace vCapProject.Core
 {
     public static class Enums
     {
-        public enum TextureQuality
+        public enum AddressLabel
         {
-            Texture_512 = 0,
-            Texture_1024 = 1,
-            Texture_2048 = 2
-        }
-
-        public enum SceneVariant
-        {
-            Catalog_A = 0,
-            Catalog_B = 1
+            A, // "A" (base scene)
+            B, // "B" (base scene)
+            Curtain,
+            Furniture,
+            Props,
+            Reflection
         }
 
         public enum LoaderPhase
@@ -43,16 +40,6 @@
             DownloadingCatalogSuccessful
         }
 
-        public enum AddressLabel
-        {
-            A, // "A" (base scene)
-            B, // "B" (base scene)
-            Curtain,
-            Furniture,
-            Props,
-            Reflection
-        }
-
         public enum Notification
         {
             None = 0,
@@ -81,6 +68,19 @@
             ModuleAlreadyLoaded,
             ModuleNotLoaded,
             Busy
+        }
+
+        public enum SceneVariant
+        {
+            Catalog_A = 0,
+            Catalog_B = 1
+        }
+
+        public enum TextureQuality
+        {
+            Texture_512 = 0,
+            Texture_1024 = 1,
+            Texture_2048 = 2
         }
     }
 }

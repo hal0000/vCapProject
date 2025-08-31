@@ -1,11 +1,8 @@
-﻿using Core;
-
-namespace Model
+﻿namespace vCapProject.Model
 {
     public class AssetModel
     {
-        public string Name;
         public bool IsActive;
-        public Enums.AddressLabel Label;
+        public string Name;
     }
 }

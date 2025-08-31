@@ -1,9 +1,9 @@
 using PrimeTween;
-using Scene;
 using UnityEngine;
 using UnityEngine.InputSystem.EnhancedTouch;
+using vCapProject.Scene;
 
-namespace Core
+namespace vCapProject.Core
 {
     /// <summary>
     ///     Central manager class that handles core game systems, scene management, and resource loading.
@@ -12,13 +12,13 @@ namespace Core
     [DefaultExecutionOrder(-1500)]
     public class GameManager : MonoBehaviour
     {
+        public BaseScene CurrentScene;
+        public SceneService SceneService;
+
         /// <summary>
         ///     Singleton instance of the GameManager for global access.
         /// </summary>
         public static GameManager Instance { get; private set; }
-
-        public BaseScene CurrentScene;
-        public SceneService SceneService;
 
         private void Awake()
         {

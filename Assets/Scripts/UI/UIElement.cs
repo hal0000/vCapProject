@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using Interface;
 using PrimeTween;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using vCapProject.Interface;
 
-namespace UI
+namespace vCapProject.UI
 {
     /// <summary>
     ///     Base class for all UI elements with ultimate performance optimizations.
@@ -132,15 +132,15 @@ namespace UI
             Initialize();
         }
 
-        public void UpdateContent(int index)
-        {
-            var a = index;
-        }
-
         public virtual void OnDestroy()
         {
             _animatables = null;
             _isInitialized = false;
+        }
+
+        public void UpdateContent(int index)
+        {
+            var a = index;
         }
 
         private void Initialize()

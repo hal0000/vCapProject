@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.AddressableAssets.ResourceLocators;
@@ -9,9 +10,8 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.SceneManagement;
-using Cysharp.Threading.Tasks; // UniTask
 
-namespace Core
+namespace vCapProject.Core
 {
     [DefaultExecutionOrder(-1000)]
     public class SceneService : MonoBehaviour
@@ -19,27 +19,27 @@ namespace Core
         private const bool RunGcAfterHeavyOps = true;
         private const float ProgressThrottleSec = 0.12f;
         private const long BytesStepForText = 1 << 20; //every one mb
-        private string _currentCatalogUrl;
-        private IResourceLocator _currentLocator;
-        private AsyncOperationHandle<IResourceLocator>? _currentCatalogHandle;
-        private readonly Dictionary<Enums.AddressLabel, AsyncOperationHandle<SceneInstance>> _loaded = new(8);
-        private bool _opInFlight;
-        private bool _initCalled;
-        private float _uiPDownload = 0f;
-        private float _uiPLoad = 0.5f;
-        private CancellationTokenSource _opCts;
 
-        private readonly List<IResourceLocation> _tmpLocs = new(8);
-        private readonly List<long> _tmpSizes = new(8);
-        private readonly List<Enums.AddressLabel> _tmpLabels = new(8);
-
-        private float _lastProgTs;
-        private long _lastBytesShown;
+        private const string GH_REPO = "hal0000/vCapProject";
 
         public Enums.SceneVariant CurrentSceneVariant = Enums.SceneVariant.Catalog_A;
         public Enums.TextureQuality CurrentTextureQuality = Enums.TextureQuality.Texture_1024;
+        private readonly Dictionary<Enums.AddressLabel, AsyncOperationHandle<SceneInstance>> _loaded = new(8);
+        private readonly List<Enums.AddressLabel> _tmpLabels = new(8);
 
-        private const string GH_REPO = "hal0000/vCapProject";
+        private readonly List<IResourceLocation> _tmpLocs = new(8);
+        private readonly List<long> _tmpSizes = new(8);
+        private AsyncOperationHandle<IResourceLocator>? _currentCatalogHandle;
+        private string _currentCatalogUrl;
+        private IResourceLocator _currentLocator;
+        private bool _initCalled;
+        private long _lastBytesShown;
+
+        private float _lastProgTs;
+        private CancellationTokenSource _opCts;
+        private bool _opInFlight;
+        private float _uiPDownload;
+        private float _uiPLoad = 0.5f;
 
         private static string SizeStr(Enums.TextureQuality q)
         {
@@ -199,7 +199,7 @@ namespace Core
             EventManager.LoaderStatusChangedInvoke(Enums.LoaderStatus.Starting);
             try
             {
-                var unloadH = Addressables.UnloadSceneAsync(h, true);
+                var unloadH = Addressables.UnloadSceneAsync(h);
                 await unloadH.ToUniTask(cancellationToken: token);
                 _loaded.Remove(label);
                 EventManager.NewNotificationInvoke(Enums.Notification.ModuleUnloaded);
@@ -228,7 +228,6 @@ namespace Core
             try
             {
                 await UnloadOpenScenesInternalAsync(token);
-                
             }
             finally
             {
@@ -238,6 +237,7 @@ namespace Core
                 ReportIdle();
             }
         }
+
         private void ResetCatalogState()
         {
             if (_currentLocator != null)
@@ -331,7 +331,7 @@ namespace Core
                     long shown = 0;
                     _lastBytesShown = 0;
 
-                    var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { sceneLoc }, false);
+                    var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { sceneLoc });
 
                     await dl.ToUniTask(
                         Progress.Create<float>(p =>
@@ -396,7 +396,7 @@ namespace Core
 
             foreach (var kv in _loaded)
             {
-                var unloadH = Addressables.UnloadSceneAsync(kv.Value, true);
+                var unloadH = Addressables.UnloadSceneAsync(kv.Value);
                 await unloadH.ToUniTask(cancellationToken: token);
             }
 
@@ -450,7 +450,7 @@ namespace Core
                     continue;
                 }
 
-                var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { loc }, false);
+                var dl = Addressables.DownloadDependenciesAsync(new List<IResourceLocation> { loc });
                 await dl.ToUniTask(
                     Progress.Create<float>(p =>
                     {
@@ -610,26 +610,6 @@ namespace Core
             EventManager.LoadProgressInvoke(Enums.LoaderPhase.DownloadingDependencies, p, message);
         }
 
-        #region Events
-
-        private void OnEnable()
-        {
-            EventManager.OnRequestLoadByQuality += HandleRequestByQuality;
-            EventManager.OnRequestSceneLoad += HandleRequestByScene;
-        }
-
-        private void OnDisable()
-        {
-            EventManager.OnRequestLoadByQuality -= HandleRequestByQuality;
-            EventManager.OnRequestSceneLoad -= HandleRequestByScene;
-
-            _opCts?.Cancel();
-            _opCts?.Dispose();
-            _opCts = null;
-        }
-
-        #endregion
-
         private async void HandleRequestByQuality(Enums.TextureQuality quality)
         {
             if (quality == CurrentTextureQuality)
@@ -639,7 +619,7 @@ namespace Core
             }
 
             CurrentTextureQuality = quality;
-            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality), true);
+            await SwitchCatalog(GetCatalogUrl(CurrentSceneVariant, CurrentTextureQuality));
         }
 
         private async void HandleRequestByScene(Enums.SceneVariant variant)
@@ -695,5 +675,25 @@ namespace Core
             if (bytes >= KB) return (bytes / KB).ToString("0") + " KB";
             return bytes + " B";
         }
+
+        #region Events
+
+        private void OnEnable()
+        {
+            EventManager.OnRequestLoadByQuality += HandleRequestByQuality;
+            EventManager.OnRequestSceneLoad += HandleRequestByScene;
+        }
+
+        private void OnDisable()
+        {
+            EventManager.OnRequestLoadByQuality -= HandleRequestByQuality;
+            EventManager.OnRequestSceneLoad -= HandleRequestByScene;
+
+            _opCts?.Cancel();
+            _opCts?.Dispose();
+            _opCts = null;
+        }
+
+        #endregion
     }
 }

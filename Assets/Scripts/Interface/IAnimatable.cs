@@ -1,4 +1,4 @@
-﻿namespace Interface
+﻿namespace vCapProject.Interface
 {
     public interface IAnimatable
     {

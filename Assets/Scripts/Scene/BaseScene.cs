@@ -1,7 +1,7 @@
-using Core;
 using UnityEngine;
+using vCapProject.Core;
 
-namespace Scene
+namespace vCapProject.Scene
 {
     public class BaseScene : MonoBehaviour
     {

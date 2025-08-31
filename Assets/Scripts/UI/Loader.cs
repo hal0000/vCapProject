@@ -1,11 +1,11 @@
-﻿using Core;
-using PrimeTween;
+﻿using PrimeTween;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using vCapProject.Core;
 
-namespace UI
+namespace vCapProject.UI
 {
     [DefaultExecutionOrder(-1001)]
     public class Loader : UIElement
@@ -35,10 +35,10 @@ namespace UI
         public UnityEvent OnSuccess;
 
         private Tween _fadeTween;
+        private Enums.LoaderPhase _lastPhase;
+        private RectTransform _meter;
         private Tween _progressTween;
         private float _visualProgress;
-        private RectTransform _meter;
-        private Enums.LoaderPhase _lastPhase;
 
         public override void Awake()
         {
@@ -70,6 +70,19 @@ namespace UI
             EventManager.OnLoadProgressDetailed += HandleLoadProgressDetailed;
         }
 
+        private void OnDisable()
+        {
+            EventManager.OnLoaderStatusChanged -= HandleLoaderStatus;
+            EventManager.OnLoadProgress -= HandleLoadProgress;
+            EventManager.OnLoadProgressDetailed -= HandleLoadProgressDetailed;
+
+            if (_fadeTween.isAlive) _fadeTween.Stop();
+            if (_progressTween.isAlive) _progressTween.Stop();
+            _visualProgress = 0f;
+            ApplyOffsets(0f);
+            SetStatus(string.Empty);
+        }
+
         private void HandleLoadProgressDetailed(Enums.LoaderPhase phase, float progress01, string message)
         {
             if (string.IsNullOrEmpty(message))
@@ -88,19 +101,6 @@ namespace UI
                     SetStatus($"Loading scene… {message}");
                     break;
             }
-        }
-
-        private void OnDisable()
-        {
-            EventManager.OnLoaderStatusChanged -= HandleLoaderStatus;
-            EventManager.OnLoadProgress -= HandleLoadProgress;
-            EventManager.OnLoadProgressDetailed -= HandleLoadProgressDetailed;
-
-            if (_fadeTween.isAlive) _fadeTween.Stop();
-            if (_progressTween.isAlive) _progressTween.Stop();
-            _visualProgress = 0f;
-            ApplyOffsets(0f);
-            SetStatus(string.Empty);
         }
 
         private void HandleLoaderStatus(Enums.LoaderStatus status)
@@ -197,7 +197,7 @@ namespace UI
             if (_progressTween.isAlive) _progressTween.Stop();
 
             _progressTween = Tween.Custom(this, _visualProgress, target01, progressSmoothTime,
-                static (Loader self, float v) =>
+                static (self, v) =>
                 {
                     self._visualProgress = v;
                     self.ApplyOffsets(v);

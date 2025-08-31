@@ -2,7 +2,7 @@
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Core
+namespace vCapProject.Core
 {
     public static class LoggerExtra
     {

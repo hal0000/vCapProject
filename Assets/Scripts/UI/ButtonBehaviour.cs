@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 
-namespace UI
+namespace vCapProject.UI
 {
     [RequireComponent(typeof(UIEffect))]
     public class ButtonBehaviour : UIElement, IPointerEnterHandler, IPointerClickHandler, IPointerDownHandler,
