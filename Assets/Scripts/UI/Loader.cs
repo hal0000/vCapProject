@@ -10,7 +10,6 @@ namespace UI
     [DefaultExecutionOrder(-1001)]
     public class Loader : UIElement
     {
-
         public Image ProgressFill;
 
         public TMP_Text StatusText;
@@ -39,6 +38,7 @@ namespace UI
         private Tween _progressTween;
         private float _visualProgress;
         private RectTransform _meter;
+        private Enums.LoaderPhase _lastPhase;
 
         public override void Awake()
         {
@@ -72,8 +72,13 @@ namespace UI
 
         private void HandleLoadProgressDetailed(Enums.LoaderPhase phase, float progress01, string message)
         {
-            SmoothProgressTo(progress01);
-            if (string.IsNullOrEmpty(message)) return;
+            if (string.IsNullOrEmpty(message))
+            {
+                WritePhaseLabelIfNeeded(phase);
+                return;
+            }
+
+            if (!float.IsNaN(progress01) && !(progress01 < 0f)) SmoothProgressTo(progress01);
             switch (phase)
             {
                 case Enums.LoaderPhase.DownloadingDependencies:
@@ -97,6 +102,7 @@ namespace UI
             ApplyOffsets(0f);
             SetStatus(string.Empty);
         }
+
         private void HandleLoaderStatus(Enums.LoaderStatus status)
         {
             switch (status)
@@ -144,7 +150,8 @@ namespace UI
                     break;
 
                 case Enums.LoaderStatus.Completed:
-                    SetStatus("Download complete.");
+                    SetStatus("Done.");
+                    SmoothProgressTo(1f);
                     Hide();
                     OnSuccess?.Invoke();
                     break;
@@ -169,18 +176,18 @@ namespace UI
 
         private void HandleLoadProgress(Enums.LoaderPhase _ignoredPhase, float progress01)
         {
-            SmoothProgressTo(progress01);
+            if (!float.IsNaN(progress01) && progress01 >= 0f) SmoothProgressTo(progress01);
+            WritePhaseLabelIfNeeded(_ignoredPhase);
         }
 
         public override void Show()
         {
             base.Show();
-
         }
+
         public override void Hide()
         {
             base.Hide();
-
         }
 
         private void SmoothProgressTo(float target01)
@@ -189,11 +196,12 @@ namespace UI
             if (Mathf.Abs(target01 - _visualProgress) < 0.004f) return;
             if (_progressTween.isAlive) _progressTween.Stop();
 
-            _progressTween = Tween.Custom(this, _visualProgress, target01, progressSmoothTime, static (Loader self, float v) =>
-            {
-                self._visualProgress = v;
-                self.ApplyOffsets(v);
-            });
+            _progressTween = Tween.Custom(this, _visualProgress, target01, progressSmoothTime,
+                static (Loader self, float v) =>
+                {
+                    self._visualProgress = v;
+                    self.ApplyOffsets(v);
+                });
         }
 
         private void ApplyOffsets(float progress01)
@@ -212,6 +220,21 @@ namespace UI
         private void SetStatus(string text)
         {
             if (StatusText != null) StatusText.text = text ?? string.Empty;
+        }
+
+        private void WritePhaseLabelIfNeeded(Enums.LoaderPhase phase)
+        {
+            if (phase == _lastPhase) return;
+            _lastPhase = phase;
+            switch (phase)
+            {
+                case Enums.LoaderPhase.DownloadingDependencies:
+                    SetStatus("Downloading…");
+                    break;
+                case Enums.LoaderPhase.SceneLoading:
+                    SetStatus("Loading scene…");
+                    break;
+            }
         }
     }
 }
