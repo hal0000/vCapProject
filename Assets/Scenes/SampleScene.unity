@@ -4876,7 +4876,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: OnShow.m_PersistentCalls.m_Calls.Array.data[1].m_MethodName
-      value: Show
+      value: Hide
       objectReference: {fileID: 0}
     - target: {fileID: 2270411120528109649, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: OnHide.m_PersistentCalls.m_Calls.Array.data[1].m_TargetAssemblyTypeName
@@ -7624,7 +7624,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8.5, y: 1054236}
+  m_AnchoredPosition: {x: 8.5, y: 1058206.8}
   m_SizeDelta: {x: 0, y: 350}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &2391248396655094563
