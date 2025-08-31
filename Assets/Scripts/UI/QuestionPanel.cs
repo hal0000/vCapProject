@@ -21,18 +21,21 @@ namespace vCapProject.UI
         {
             _sceneIndex = sceneIndex;
             _title.text = "Archviz Scene: " + (sceneIndex + 1);
+            SFXManager.I.PlayDialogOpen();
             Show();
         }
 
         public void LoadPartial()
         {
             _scene.ChangeScene(_sceneIndex);
+            SFXManager.I.PlayDialogClose();
             Hide();
         }
 
         public void LoadFull()
         {
             _scene.FullLoadSceneByIndex(_sceneIndex);
+            SFXManager.I.PlayDialogClose();
             Hide();
         }
     }

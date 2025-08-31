@@ -183,11 +183,13 @@ namespace vCapProject.UI
         public override void Show()
         {
             base.Show();
+            SFXManager.I.PlayDialogOpen();
         }
 
         public override void Hide()
         {
             base.Hide();
+            SFXManager.I.PlayDialogClose();
         }
 
         private void SmoothProgressTo(float target01)

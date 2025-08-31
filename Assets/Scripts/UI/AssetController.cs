@@ -1,4 +1,5 @@
 ﻿using TMPro;
+using vCapProject.Core;
 using vCapProject.Model;
 
 namespace vCapProject.UI
@@ -30,6 +31,18 @@ namespace vCapProject.UI
                 ButtonEnable.SetEnabled();
                 ButtonDisable.SetDisabled();
             }
+        }
+
+        public override void Show()
+        {
+            base.Show();
+            SFXManager.I.PlayDialogOpen();
+        }
+
+        public override void Hide()
+        {
+            base.Hide();
+            SFXManager.I.PlayDialogClose();
         }
     }
 }

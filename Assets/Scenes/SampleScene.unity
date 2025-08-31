@@ -158,7 +158,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.size
-      value: 2
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[1].m_Mode
@@ -167,7 +167,7 @@ PrefabInstance:
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[0].m_Target
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 65061245}
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[1].m_Target
       value: 
@@ -177,8 +177,16 @@ PrefabInstance:
       value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: Hide
+      objectReference: {fileID: 0}
+    - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[1].m_MethodName
       value: Show
+      objectReference: {fileID: 0}
+    - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
+      propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: vCapProject.UI.QuestionPanel, Assembly-CSharp
       objectReference: {fileID: 0}
     - target: {fileID: 2233031253983998918, guid: ca557e286ae5c4041a08f6cdc9e64f9c, type: 3}
       propertyPath: ClickAction.m_PersistentCalls.m_Calls.Array.data[1].m_TargetAssemblyTypeName
@@ -595,12 +603,108 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+      - m_Target: {fileID: 949222665}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Hide
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 2047890262}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Hide
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 1858489495}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Hide
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 2015066965}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Hide
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   OnHide:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 65061243}
         m_TargetAssemblyTypeName: UI.UIBlurEffect, Assembly-CSharp
         m_MethodName: OnSoftHide
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 949222665}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Show
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 2047890262}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Show
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 1858489495}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Show
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 2015066965}
+        m_TargetAssemblyTypeName: vCapProject.UI.ButtonBehaviour, Assembly-CSharp
+        m_MethodName: Show
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -2656,6 +2760,17 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 1619791276150605879, guid: e2d678ed47731584fac31a2f846084d3, type: 3}
   m_PrefabInstance: {fileID: 949222663}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &949222665 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 731673729184581432, guid: e2d678ed47731584fac31a2f846084d3, type: 3}
+  m_PrefabInstance: {fileID: 949222663}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed1bd8f967dbbe540a3a0b3d95094be9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &1001001384
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5075,6 +5190,56 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1438916670}
   m_CullTransparentMesh: 1
+--- !u!1 &1629187163
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1629187164}
+  - component: {fileID: 1629187165}
+  m_Layer: 0
+  m_Name: SFXManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1629187164
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1629187163}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.972, y: 1.312, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1629187165
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1629187163}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3aec3ed581f1429885289b2ef66942bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ClickClip: {fileID: 8300000, guid: 48dc4e75340cc584ea09dbca2f51f0c5, type: 3}
+  DialogOpenClip: {fileID: 8300000, guid: 88f4c41767e9e2046bfa49db0b5a1895, type: 3}
+  DialogCloseClip: {fileID: 8300000, guid: 3433ef2675ce17541bb8a813cde69e99, type: 3}
+  NotificationPop: {fileID: 8300000, guid: ae5e9a73d283705429c5f5d23f134bc4, type: 3}
+  Volume: 0.5
+  Voices: 4
 --- !u!1 &1676563233
 GameObject:
   m_ObjectHideFlags: 0
@@ -5941,6 +6106,17 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 1619791276150605879, guid: e2d678ed47731584fac31a2f846084d3, type: 3}
   m_PrefabInstance: {fileID: 2047890260}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2047890262 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 731673729184581432, guid: e2d678ed47731584fac31a2f846084d3, type: 3}
+  m_PrefabInstance: {fileID: 2047890260}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed1bd8f967dbbe540a3a0b3d95094be9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &2052966511
 GameObject:
   m_ObjectHideFlags: 0
@@ -7406,7 +7582,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8.5, y: 974354.25}
+  m_AnchoredPosition: {x: 8.5, y: 1032254.7}
   m_SizeDelta: {x: 0, y: 350}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &2391248396655094563
@@ -7937,3 +8113,4 @@ SceneRoots:
   - {fileID: 2087238068}
   - {fileID: 2052966516}
   - {fileID: 545277767}
+  - {fileID: 1629187164}

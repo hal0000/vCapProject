@@ -1024,7 +1024,7 @@ MonoBehaviour:
   OnHide:
     m_PersistentCalls:
       m_Calls: []
-  IsVisible: 0
+  IsVisible: 1
   ButtonDisabled: 0
   ContainsIdleEffect: 0
   NoAnim: 0

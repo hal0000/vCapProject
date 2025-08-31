@@ -100,6 +100,7 @@ namespace vCapProject.UI
         {
             IsVisible = true;
             ShowAnimations();
+            SFXManager.I.PlayPopUp();
             OnShow.Invoke();
         }
 

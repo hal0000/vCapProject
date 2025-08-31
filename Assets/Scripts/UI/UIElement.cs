@@ -116,9 +116,6 @@ namespace vCapProject.UI
         ///     Whether animations should be allowed to run.
         /// </summary>
         protected bool CanAnimate => IsVisible && gameObject.activeInHierarchy;
-
-        public bool EnableThemeSwitch = false;
-        [Min(0f)] public float ThemeLerp = 0.10f;
         
         /// <summary>
         ///     Initializes the UI element by caching components and setting up default values.
