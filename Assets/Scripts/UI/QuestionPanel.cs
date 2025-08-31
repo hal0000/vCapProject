@@ -20,7 +20,7 @@ namespace UI
         public void Init(int sceneIndex)
         {
             _sceneIndex = sceneIndex;
-            _title.text = "Archviz Scene: " + sceneIndex + 1;
+            _title.text = "Archviz Scene: " + (sceneIndex + 1);
             Show();
         }
 

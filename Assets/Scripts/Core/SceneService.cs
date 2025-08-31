@@ -228,12 +228,31 @@ namespace Core
             try
             {
                 await UnloadOpenScenesInternalAsync(token);
+                
             }
             finally
             {
                 _opInFlight = false;
+                ResetCatalogState();
+                if (RunGcAfterHeavyOps) GC.Collect();
                 ReportIdle();
             }
+        }
+        private void ResetCatalogState()
+        {
+            if (_currentLocator != null)
+            {
+                Addressables.RemoveResourceLocator(_currentLocator);
+                _currentLocator = null;
+            }
+
+            if (_currentCatalogHandle.HasValue)
+            {
+                SafeRelease(_currentCatalogHandle.Value);
+                _currentCatalogHandle = null;
+            }
+
+            _currentCatalogUrl = null;
         }
 
         public bool ClearAllCaches()
